@@ -1,15 +1,16 @@
 ############################################################
 
-# Manga to Anki, V1.4
-# 16/07/2020 Momodath -_-
+# Manga to Anki, V2
+# 01/09/2020 Momodath
 
 ############################################################
 
 import tkinter as tk
 from tkinter import ttk
 
-import os, io, csv, re, numpy, blend_modes, wave
+import os, io, csv, re, numpy, blend_modes, wave, ffmpeg
 import matplotlib.pyplot as plt
+
 import jpverb7 as jp
 from PIL import Image, ImageTk, ImageDraw
 
@@ -29,568 +30,734 @@ client = vision.ImageAnnotatorClient(credentials=credential_json)
 
 ############################################################
 
-# --- root loop ---
 
-root = tk.Tk()
+class mainwindow:
+    image_exts = ['jpg','jpeg','png']
+    movie_exts = ['mov']
 
-
-# --- Regular functions ---
-
-
-def original_coords(A_coords, crop_box, new_thumbnail):
     
-    #A_co_ords = the coordinate we want to translate
-    #crop_box = the co-ordinates of the crop on the larger image
-    #new_thumbnail = the new sized thumbnail crop
+    anki_folder = '/Users/earth/Library/Application Support/Anki2/User 1/collection.media/'
+    anki_folder = '/Users/earth/Downloads/'
+    src_folder = '/Users/earth/Documents/Japanese/Media/Manga/OCR screens/'
 
-    new_ratio = (crop_box[2] - crop_box[0]) / new_thumbnail.width
-    B_coords = [(i * new_ratio) for i in A_coords]
-    C_coords = [(crop_box[0] + B_coords[0]), (crop_box[1] + B_coords[1])]
-    return C_coords
+    def __init__(self, master):
+
+        self.master = master
+
+        # --- define images ----
+
+        self.img_index = 0
+        #This is iterated over later
+
+        self.seen_images = set()
+        #A set we will add to
+
+        self.zoom_io = False
+        self.zoomed = False
+
+        self.working_size = (600, 600)
+        self.outerbr_width = 15
+
+        #self.anki_folder = '/Users/earth/Library/Application Support/Anki2/User 1/collection.media/'
+        #anki_folder = '/Users/earth/Downloads/'
+
+        #self.src_folder = '/Users/earth/Documents/Japanese/Media/Manga/OCR screens/'
+
+        self.file_list = os.listdir(self.src_folder)
+        self.input_files = [self.Filetype(file) for file in self.file_list]
+        self.input_files = [self.Filetype.Filesplit(file) for file in self.input_files if file.type != 'none']
 
 
-# --- Event functions
+        self.currentfile = self.input_files[self.img_index]
 
-def click(event):
-    global one_x, one_y
-    one_x, one_y = event.x, event.y
+        self.anki_txt = ['' for i in self.file_list]
+        self.thumb_cropbox = (0,0, self.currentfile.image.width, self.currentfile.image.height)
+        #Tells the program the initial thumbnail is an exact proportion to the initial image (this is updated with the new shape when we crop)
 
-def click_move(event):
-    if zoom_io:
-        pass
-    else:
-        canvas.delete('rec', 'refline')
+        # --- Defaults
+        self.current_thumbnail = self.currentfile.image.copy()
+        self.current_thumbnail.thumbnail(self.working_size)
+        self.main_image = ImageTk.PhotoImage(image=self.current_thumbnail)
 
-        cropbox_shadow = canvas.create_rectangle((one_x+1, one_y+1, event.x+1, event.y+1), outline="purple", dash= (10,10), width=2, tags='rec')  
-        cropbox = canvas.create_rectangle((one_x, one_y, event.x, event.y), outline="yellow", dash= (10,10), width=2, tags='rec')
+        self.cropped_image = self.current_thumbnail
+        self.audio_time = 0
+        self.bar_update = None
 
-def upclick(event):
-    if zoom_io:
-        zoom_in(event)
-    else:
-        global cropped_image
-        global image_replace
-        global thumb_cropbox
-        global adj_w, adj_h
 
-        cropbox = canvas.create_rectangle((one_x, one_y, event.x, event.y), tags='rec')
-        cbox = canvas.coords(cropbox)
-        cbox[0:4] = cbox[0]-adj_w, cbox[1]-adj_h, cbox[2]-adj_w, cbox[3]-adj_h
+        # --- GUI elements and bindings ---
 
-        firstx, firsty, secondx, secondy = cbox
+        #Frames
+        self.canvas_frame = tk.Frame(self.master, borderwidth= self.outerbr_width, relief = "sunken")
+        self.info_frame = tk.Frame(self.master, borderwidth= 5, relief = "sunken")
+        self.output_frame = tk.Frame(self.info_frame)
+        self.options_frame = tk.Frame(self.info_frame, borderwidth=2)
+        self.player_frame = tk.Frame(self.info_frame, borderwidth= 1, relief = "sunken")
+        #Set edges of canvas frame to be interactive
+        self.canvas_frame.bind('<Button-1>', self.outer_click)
+        self.canvas_frame.bind('<B1-Motion>', self.ref_line)
 
-        canvas.delete('rec')
+        # Canvas
+        self.canvas = tk.Canvas(self.canvas_frame, width=self.working_size[0], height=self.working_size[1])
+        #Cropbox functionality
+        self.canvas.bind("<Button-1>", self.click)
+        self.canvas.bind("<B1-Motion>", self.click_move)
+        self.canvas.bind("<ButtonRelease-1>", self.upclick)
 
-        if secondx > cropped_image.width:
-            secondx = cropped_image.width
-        if secondy > cropped_image.height:
-            secondy = cropped_image.height
+        # Buttons
+        self.reset_button = ttk.Button(self.master, text="RESET", command= self.reset_image)
+        self.prev_button = ttk.Button(self.master, text="Previous Image", command= self.prev_image)
+        self.next_button = ttk.Button(self.master, text="Next Image", command= self.next_image)
+        self.save_button = ttk.Button(self.master, text="Delete", command= self.delete_image)
 
-        if firstx < 0:
-            firstx = 0
-        if firsty < 0:
-            firsty = 0
+        self.zoom_button = ttk.Button(self.master, text="Zoom", command= self.toggle_zoom)
+        self.OCR_button = ttk.Button(self.master, text="OCR", command = self.Google_OCR)
+        self.lookup_button = ttk.Button(self.master, text="Lookup", command = self.lookup)
+        self.box_remove_button = ttk.Button(self.master, text="Remove box", command = lambda: self.box_removal(self.canvas.coords('refline')))
+        self.export_button = ttk.Button(self.master, text="Export", command = self.export)
 
-        #Image replacement
-        thumb_cropbox = [original_coords(i, thumb_cropbox, cropped_image) for i in ([firstx,firsty],[secondx,secondy])]
-        thumb_cropbox = thumb_cropbox[0] + thumb_cropbox[1]
+        #Audio player
+        self.play_button = ttk.Button(self.player_frame, text="▶", width=2, command = self.play_audio)
+        self.pause_button = ttk.Button(self.player_frame, text="❚❚", width=2, command = self.pause_audio)
+        self.reload_button = ttk.Button(self.player_frame, text="⟳", width=2, command= self.replay_audio)
+        self.chop_button = ttk.Button(self.player_frame, text="✂", width=2, command= self.chop_audio)
+        self.prog_bar = ttk.Scale(self.player_frame, orient='horizontal', length=340, from_=1.0, to= 1.0, command=self.scrub)
+        #Wave canvas
+        self.wave_size = (320,100)
+        self.wave_canvas = tk.Canvas(self.player_frame, width = self.wave_size[0], height = self.wave_size[1])
+
+        #OCR_output
+        self.OCR_box = tk.Text(self.output_frame, width = 47, height = 5, borderwidth=2, relief="sunken", wrap='word')
+
+        #Info box
+        self.info_box = tk.Text(self.output_frame, width = 45, height=5, borderwidth=2, relief="sunken", wrap='word')
+        self.info_scroll = ttk.Scrollbar(self.output_frame, orient='vertical', command= self.info_box.yview)
+        self.info_box.configure(yscrollcommand= self.info_scroll.set)
+
+        self.options_text = ttk.Label(self.options_frame, text="For this word,「学校」, there's a few things it could be:", wraplength = 350, justify='center')
+
+
+        # -- Gridding --
+
+        self.canvas_frame.grid(row=1, column=0, columnspan= 5)
+        self.info_frame.grid(row=0, rowspan=3, column=5, sticky='N,S,E,W')
+
+        self.canvas.grid()
+        self.zoom_button.grid(row = 2, column= 0)
+        self.OCR_button.grid(row=2, column=1)
+        self.lookup_button.grid(row=2, column=2)
+        self.box_remove_button.grid(row=2, column=3)
+        self.export_button.grid(row=2, column=4)
+
+        self.reset_button.grid(row=0, column = 0)
+        self.prev_button.grid(row=0, column=1)
+        self.next_button.grid(row=0, column= 2)
+        self.save_button.grid(row=0, column= 4)
+
+        self.output_frame.grid(row=0,column=0, sticky='N')
+        self.OCR_box.grid(row=0,column=0, columnspan=2, sticky='N')
+        self.info_box.grid(row=1, column=0, sticky='N,S')
+        self.info_scroll.grid(row=1, column=1, sticky='N,S')
+
+        self.options_frame.grid(row=2, columnspan=2, sticky='S')
+
+        self.player_frame.grid(row = 3, columnspan = 2, sticky='S,E')
+        self.info_frame.rowconfigure(0, weight = 1)
+
+        self.play_button.grid(row=0, column=1)
+        self.pause_button.grid(row=0, column=2)
+        self.reload_button.grid(row=0, column=3)
+        self.chop_button.grid(row=0, column=4)
+        self.prog_bar.grid(row=1, columnspan=5)
+        self.wave_canvas.grid(row=3, columnspan=5)
+
+        self.options_text.grid(row=0, columnspan=2, sticky='N')
+
+        # -- Changing elements
+
+        # set first image on canvas
+        self.image_id = self.canvas.create_image(self.working_size[0]/2, self.working_size[1]/2, image=self.main_image)
+        #The values we need to offset our coordinates by for them to be accurate
+        self.adj_w = (self.working_size[0]/2) - ((self.cropped_image.width)/2)
+        self.adj_h = (self.working_size[1]/2) - ((self.cropped_image.height)/2)
+
+
+        self.set_image()
+        self.lookup()
+
+    class Filetype:
+        def __init__(self, file):
+
+            file_ext = file.split(".")[-1]
+
+            self.filename = file.split(".")[0]
+            self.file_src = file
+
+            if file_ext in mainwindow.movie_exts:
+                self.type = 'video'
+
+            elif file_ext in mainwindow.image_exts:
+                self.type = 'image'
+
+            else:
+                self.type = 'none'
+
+        def Filesplit(file):
+
+            file.OCR_text = ''
+            file.ChopPoint = 0
+            file.meanings = ''
+            file.formatted_meanings = ''
+
+            if file.type == 'video':
+
+                clip = f'{mainwindow.src_folder}{file.file_src}'
+                #FFMPEG pull last frame as png
+
+                try:
+                    imagebytes, _ = (
+                    ffmpeg
+                    .input(clip, sseof=-0.1)
+                    .output(f'pipe:', vframes=1, format='image2', vcodec='png')
+                    .run(capture_stdout=True, capture_stderr=True)
+                    )
+
+                except ffmpeg.Error as e:
+                    print('stdout:', e.stdout.decode('utf8'))
+                    print('stderr:', e.stderr.decode('utf8'))
+                    raise e
+
+                imagedata = io.BytesIO(imagebytes)
+                file.img_src = imagedata
+
+                file.image = Image.open(imagedata)
+                
+                #FFMPEG rip audio as wav
+                audiobytes, _ = (
+                ffmpeg
+                .input(clip)
+                .output('pipe:', format='wav')
+                .run(capture_stdout=True)
+                )
+
+                file.audio = io.BytesIO(audiobytes)
+
+                buf = io.BytesIO()
+                buf.seek(0)
+
+                wave_file = wave.open(file.audio, "r")
+
+                # Extract Raw Audio from Wav File
+                signal = wave_file.readframes(-1)
+                signal = numpy.frombuffer(signal, "<i2")
+
+                fig = plt.figure(figsize=(25,10))
+                plt.plot(signal,color='#ff33af')
+                plt.gca().set_axis_off()
+                plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
+                plt.margins(0,0)
+                plt.savefig(buf,format='png',transparent=True, dpi=20)
+
+                file.waveform = Image.open(buf)
+                file.sound = AudioSegment.from_file(file.audio, format('wav'))
+                file.soundfile = f'[sound: {file.filename}.mp3]'
+
+                return file
+
+
+            elif file.type == 'image':
+                file.img_src = open(f'{mainwindow.src_folder}{file.file_src}','rb')
+                file.image = Image.open(f'{mainwindow.src_folder}{file.file_src}')
+                file.soundfile = None
+                return file
+
+
+    # --- Regular functions ---
+
+    def original_coords(self, A_coords, crop_box, new_thumbnail):
         
-        cropped_image = imagelist[img_index].crop(box=thumb_cropbox)
-        cropped_image.thumbnail(working_size)
+        #A_co_ords = the coordinate we want to translate
+        #crop_box = the co-ordinates of the crop on the larger image
+        #new_thumbnail = the new sized thumbnail crop
+
+        new_ratio = (crop_box[2] - crop_box[0]) / new_thumbnail.width
+        B_coords = [(i * new_ratio) for i in A_coords]
+        C_coords = [(crop_box[0] + B_coords[0]), (crop_box[1] + B_coords[1])]
+        return C_coords
+
+
+    # --- Event functions
+
+    def click(self, event):
+        self.one_x, self.one_y = event.x, event.y
+
+    def click_move(self, event):
+        if self.zoom_io:
+            pass
+
+        else:
+            self.canvas.delete('rec', 'refline')
+
+            cropbox_shadow = self.canvas.create_rectangle((self.one_x+1, self.one_y+1, event.x+1, event.y+1), outline="purple", dash= (10,10), width=2, tags='rec')  
+            cropbox = self.canvas.create_rectangle((self.one_x, self.one_y, event.x, event.y), outline="yellow", dash= (10,10), width=2, tags='rec')
+
+    def upclick(self, event):
+
+        if self.zoom_io:
+            self.zoom_in(event)
+            self.canvas.delete('rec')
+
+        else:
+            cropbox = self.canvas.create_rectangle((self.one_x, self.one_y, event.x, event.y), tags='rec')
+            cbox = self.canvas.coords(cropbox)
+            cbox[0:4] = cbox[0]-self.adj_w, cbox[1]-self.adj_h, cbox[2]-self.adj_w, cbox[3]-self.adj_h
+
+            self.firstx, self.firsty, secondx, secondy = cbox
+
+            self.canvas.delete('rec')
+
+            if secondx > self.cropped_image.width:
+                secondx = self.cropped_image.width
+            if secondy > self.cropped_image.height:
+                secondy = self.cropped_image.height
+
+            if self.firstx < 0:
+                self.firstx = 0
+            if self.firsty < 0:
+                self.firsty = 0
+
+            #Image replacement
+            self.thumb_cropbox = [self.original_coords(i, self.thumb_cropbox, self.cropped_image) for i in ([self.firstx,self.firsty],[secondx,secondy])]
+            self.thumb_cropbox = self.thumb_cropbox[0] + self.thumb_cropbox[1]
+            
+            self.cropped_image = self.currentfile.image.crop(box=self.thumb_cropbox)
+            self.cropped_image.thumbnail(self.working_size)
+            
+            self.image_replace = ImageTk.PhotoImage(self.cropped_image)
+            self.canvas.itemconfig(self.image_id, image=self.image_replace)
+
+            # There should be a way to do this cleaner (not call it twice):
+            self.adj_w = (self.working_size[0]/2) - ((self.cropped_image.width)/2)
+            self.adj_h = (self.working_size[1]/2) - ((self.cropped_image.height)/2)
+
+
+    def outer_click(self, event):
         
-        image_replace = ImageTk.PhotoImage(cropped_image)
-        canvas.itemconfig(image_id, image=image_replace)
+        #For the checkerboard display
+        self.horiz_area = range(int(self.adj_w),int(self.working_size[0]-self.adj_w))
+        self.vert_area = range(int(self.adj_h),int(self.working_size[1]-self.adj_h))
 
-        # There should be a way to do this cleaner (not call it twice):
-        adj_w = (working_size[0]/2) - ((cropped_image.width)/2)
-        adj_h = (working_size[1]/2) - ((cropped_image.height)/2)
+        if event.x <= self.outerbr_width:
+            self.direction = 'l'
+
+        elif event.x >= self.working_size[0]:
+            self.direction = 'r'
+
+        elif event.y <= self.outerbr_width:
+            self.direction = 't'
+
+        elif event.y >= self.working_size[1]:
+            self.direction = 'b'
+
+    def ref_line(self, event):
+        #global refline #So we can retrive the coordinates
+
+        self.canvas.delete('refline')
+
+        checker_space = 4
+
+        if self.direction == 'l' or self.direction == 'r':
+            self.refline_xy = (event.x, 0, event.x, self.working_size[1])        
+            if self.direction == 'l':
+                self.checker = [self.canvas.create_line(self.horiz_area[0],i, event.x, i) for i in self.vert_area[::checker_space] if event.x>self.horiz_area[0]] 
+            if self.direction == 'r':
+                self.checker = [self.canvas.create_line(self.horiz_area[-1],i, event.x, i) for i in self.vert_area[::checker_space] if event.x<self.vert_area[-1]] 
+        if self.direction == 't' or self.direction == 'b':
+            self.refline_xy = (0, event.y, self.working_size[0], event.y)
+            if self.direction == 't':
+                self.checker = [self.canvas.create_line(i,self.vert_area[0], i, event.y) for i in self.horiz_area[::checker_space] if event.y>self.vert_area[0]] 
+            if self.direction == 'b':
+                self.checker = [self.canvas.create_line(i,self.vert_area[-1], i,event.y) for i in self.horiz_area[::checker_space] if event.x<self.vert_area[-1]]
+
+        [self.canvas.itemconfig(i, width=1, dash=(1,checker_space), fill='orange', tags='refline') for i in self.checker]
+            
+        refline_shadow = self.canvas.create_line(self.refline_xy, dash= None, width=1, fill='red', tags='refline')
+        refline = self.canvas.create_line(self.refline_xy, dash= (10,5), width=1, fill='cyan', tags='refline')
+
+        print(self.canvas.coords('refline'))
+
+    def box_removal(self, xy):
+        #global imagelist #preserves our RGBA conversion
+        #global image_replace #prevents garbage collection 
+        #global adj_w, adj_h, cropped_image, thumb_cropbox, zoomed
+
+        if self.zoomed:
+            cropbox = self.zoombox
+        else:
+            cropbox = self.thumb_cropbox
+        xy = self.original_coords([xy[2]-self.adj_w, xy[3]-self.adj_h], cropbox, self.cropped_image)
+
+        def check_direction():
+            if self.direction == 'l':
+                return (0,0,  xy[0], self.currentfile.image.height)
+            if self.direction == 'r':
+                return (xy[0], self.currentfile.image.height, self.currentfile.image.width, 0)
+            if self.direction == 't':
+                return (0,0, self.currentfile.image.width, xy[1])
+            if self.direction == 'b':
+                return (0, self.currentfile.image.height, self.currentfile.image.width, xy[1])
+        rec_dims = check_direction()
+
+        print(rec_dims)
+
+        RGB_colour = (112,112,112)
+
+        self.currentfile.image = self.currentfile.image.convert('RGBA')
+        self.divide_map= Image.new('RGBA', (self.currentfile.image.width, self.currentfile.image.height), color='white')
+
+        self.img1 = ImageDraw.Draw(self.divide_map)
+        self.img1.rectangle(rec_dims, fill=RGB_colour, outline=None) #<-- NOT WORKING
+
+        # Import background image
+        background_img_raw = self.currentfile.image  # RGBA image
+        background_img = numpy.array(background_img_raw)  # Inputs to blend_modes need to be numpy arrays.
+        background_img_float = background_img.astype(float)  # Inputs to blend_modes need to be floats.
+
+        # Import foreground image
+        foreground_img_raw = self.divide_map  # RGBA image
+        foreground_img = numpy.array(foreground_img_raw)  # Inputs to blend_modes need to be numpy arrays.
+        foreground_img_float = foreground_img.astype(float)  # Inputs to blend_modes need to be floats.
+
+        # Blend images
+        opacity = 1  # The opacity of the foreground that is blended onto the background is 70 %.
+        blended_img_float = blend_modes.divide(background_img_float, foreground_img_float, opacity)
+
+        # Convert blended image back into PIL image
+        blended_img = numpy.uint8(blended_img_float)  # Image needs to be converted back to uint8 type for PIL handling.
+        blended_img_raw = Image.fromarray(blended_img).convert('RGB')  # Note that alpha channels are displayed in black by PIL by default.
+                                                        # This behavior is difficult to change (although possible).
+                                                        # If you have alpha channels in your images, then you should give
+                                                        # OpenCV a try.
+
+        # Display blended image
+        self.currentfile.image = blended_img_raw.crop(box=self.thumb_cropbox)
+        self.zoomed = False
+        self.set_image()
+
+    def toggle_zoom(self):
+        if self.zoom_io:
+            self.zoom_io = False
+            self.master.config(cursor='arrow')
+        else:
+            self.zoom_io = True
+            self.master.config(cursor='crosshair')
+
+    def zoom_in(self, event):
+        global zoomed_img #Prevents the image getting garbage collected
+        global zoom_io, zoombox, adj_w, adj_h, cropped_image, zoomed
+
+        if self.zoomed:
+            self.zoomed = False
+            self.toggle_zoom()
+            self.set_image()
+
+        else:
+            event.x, event.y = event.x - self.adj_w, event.y - self.adj_h
+            zoom_coords = self.original_coords([event.x,event.y], self.thumb_cropbox, self.cropped_image)
+            #These if statements adjust for the user clicking out of bounds
+            if zoom_coords[0] > self.currentfile.image.width:
+                zoom_coords[0] = self.currentfile.image.width
+            if zoom_coords[1] > self.currentfile.image.height:
+                zoom_coords[1] = self.currentfile.image.height
+            if zoom_coords[0] < 0:
+                zoom_coords[0] = 0
+            if zoom_coords[1] < 0:
+                zoom_coords[1] = 0
+
+            x_buffer = self.working_size[0]/2
+            y_buffer = self.working_size[1]/2
+
+            scale = 10
+
+            self.zoombox = [zoom_coords[0]-(x_buffer/scale), zoom_coords[1]-(y_buffer/scale), zoom_coords[0]+(x_buffer/scale), zoom_coords[1]+(y_buffer/scale)]
+            #thumb_cropbox = zoombox
+            zoomed_img = self.currentfile.image.crop(self.zoombox)
+            zoomed_img = zoomed_img.resize([zoomed_img.width*scale,zoomed_img.height*scale], resample = 0)
+
+            self.adj_w = (self.working_size[0]/2) - ((zoomed_img.width)/2)
+            self.adj_h = (self.working_size[1]/2) - ((zoomed_img.height)/2)
+            self.cropped_image = zoomed_img
+
+            zoomed_img = ImageTk.PhotoImage(image=zoomed_img)
+            self.canvas.itemconfig(self.image_id, image=zoomed_img)
+
+            self.zoomed = True
+            self.zoom_io = True
 
 
-def outer_click(event):
-    global direction
-    global horiz_area, vert_area
+    def next_image(self):
 
-    #For the checkerboard display
-    horiz_area = range(int(adj_w),int(working_size[0]-adj_w))
-    vert_area = range(int(adj_h),int(working_size[1]-adj_h))
+        self.save_image() #Saves current crop before moving on
 
-    if event.x <= outerbr_width:
-        direction = 'l'
+        if self.img_index == len(self.input_files)-1:
+            self.img_index = 0
+        else:
+            self.img_index += 1
 
-    elif event.x >= working_size[0]:
-        direction = 'r'
+        self.set_image()
+        self.lookup()
 
-    elif event.y <= outerbr_width:
-        direction = 't'
+    def prev_image(self):
 
-    elif event.y >= working_size[1]:
-        direction = 'b'
+        self.save_image() #Saves current crop before moving on
 
-def ref_line(event):
-    global refline #So we can retrive the coordinates
+        if self.img_index > 0:
+            self.img_index -= 1
+        else:
+            self.img_index = len(self.input_files)-1
 
-    canvas.delete('refline')
+        self.set_image()
+        self.lookup()
 
-    checker_space = 4
-
-    if direction == 'l' or direction == 'r':
-        refline_xy = (event.x, 0, event.x, working_size[1])        
-        if direction == 'l':
-            checker = [canvas.create_line(horiz_area[0],i, event.x, i) for i in vert_area[::checker_space] if event.x>horiz_area[0]] 
-        if direction == 'r':
-            checker = [canvas.create_line(horiz_area[-1],i, event.x, i) for i in vert_area[::checker_space] if event.x<vert_area[-1]] 
-    if direction == 't' or direction == 'b':
-        refline_xy = (0, event.y, working_size[0], event.y)
-        if direction == 't':
-            checker = [canvas.create_line(i,vert_area[0], i, event.y) for i in horiz_area[::checker_space] if event.y>vert_area[0]] 
-        if direction == 'b':
-            checker = [canvas.create_line(i,vert_area[-1], i,event.y) for i in horiz_area[::checker_space] if event.x<vert_area[-1]]
-
-    [canvas.itemconfig(i, width=1, dash=(1,checker_space), fill='orange', tags='refline') for i in checker]
+    def reset_image(self):
         
-    refline_shadow = canvas.create_line(refline_xy, dash= None, width=1, fill='red', tags='refline')
-    refline = canvas.create_line(refline_xy, dash= (10,5), width=1, fill='cyan', tags='refline')
+        self.currentfile.image = Image.open(self.currentfile.img_src)
 
-def box_removal(xy):
-    global imagelist #preserves our RGBA conversion
-    global image_replace #prevents garbage collection 
-    global adj_w, adj_h, cropped_image, thumb_cropbox, zoomed
-
-    print(zoomed)
-    if zoomed:
-        cropbox = zoombox
-    else:
-        cropbox = thumb_cropbox
-    xy = original_coords([xy[0]-adj_w, xy[1]-adj_h], cropbox, cropped_image)
-
-    def check_direction():
-        if direction == 'l':
-            return (0,0,  xy[0], imagelist[img_index].height)
-        if direction == 'r':
-            return (xy[0], imagelist[img_index].height, imagelist[img_index].width, 0)
-        if direction == 't':
-            return (0,0, imagelist[img_index].width, xy[1])
-        if direction == 'b':
-            return (0, imagelist[img_index].height, imagelist[img_index].width, xy[1])
-    rec_dims = check_direction()
-
-    RGB_colour = (112,112,112)
-
-    imagelist[img_index] = imagelist[img_index].convert('RGBA')
-    divide_map= Image.new('RGBA', (imagelist[img_index].width, imagelist[img_index].height), color='white')
-
-    img1 = ImageDraw.Draw(divide_map)
-    img1.rectangle(rec_dims, fill=RGB_colour, outline=None)
-
-    # Import background image
-    background_img_raw = imagelist[img_index]  # RGBA image
-    background_img = numpy.array(background_img_raw)  # Inputs to blend_modes need to be numpy arrays.
-    background_img_float = background_img.astype(float)  # Inputs to blend_modes need to be floats.
-
-    # Import foreground image
-    foreground_img_raw = divide_map  # RGBA image
-    foreground_img = numpy.array(foreground_img_raw)  # Inputs to blend_modes need to be numpy arrays.
-    foreground_img_float = foreground_img.astype(float)  # Inputs to blend_modes need to be floats.
-
-    # Blend images
-    opacity = 1  # The opacity of the foreground that is blended onto the background is 70 %.
-    blended_img_float = blend_modes.divide(background_img_float, foreground_img_float, opacity)
-
-    # Convert blended image back into PIL image
-    blended_img = numpy.uint8(blended_img_float)  # Image needs to be converted back to uint8 type for PIL handling.
-    blended_img_raw = Image.fromarray(blended_img).convert('RGB')  # Note that alpha channels are displayed in black by PIL by default.
-                                                    # This behavior is difficult to change (although possible).
-                                                    # If you have alpha channels in your images, then you should give
-                                                    # OpenCV a try.
-
-    # Display blended image
-    imagelist[img_index] = blended_img_raw.crop(box=thumb_cropbox)
-    zoomed = False
-    set_image()
-
-def toggle_zoom():
-    global zoom_io
-    if zoom_io == False:
-        zoom_io = True
-        root.config(cursor='crosshair')
-    else:
-        zoom_io = False
-        root.config(cursor='arrow')
-
-def zoom_in(event):
-    global zoomed_img #Prevents the image getting garbage collected
-    global zoom_io, zoombox, adj_w, adj_h, cropped_image, zoomed
-
-    if zoomed:
-        zoomed = False
-        toggle_zoom()
-        set_image()
-
-    else:
-        event.x, event.y = event.x - adj_w, event.y - adj_h
-        zoom_coords = original_coords([event.x,event.y], thumb_cropbox, cropped_image)
-        #These if statements adjust for the user clicking out of bounds
-        if zoom_coords[0] > imagelist[img_index].width:
-            zoom_coords[0] = imagelist[img_index].width
-        if zoom_coords[1] > imagelist[img_index].height:
-            zoom_coords[1] = imagelist[img_index].height
-        if zoom_coords[0] < 0:
-            zoom_coords[0] = 0
-        if zoom_coords[1] < 0:
-            zoom_coords[1] = 0
-
-        x_buffer = working_size[0]/2
-        y_buffer = working_size[1]/2
-
-        scale = 10
-
-        zoombox = [zoom_coords[0]-(x_buffer/scale), zoom_coords[1]-(y_buffer/scale), zoom_coords[0]+(x_buffer/scale), zoom_coords[1]+(y_buffer/scale)]
-        #thumb_cropbox = zoombox
-        zoomed_img = imagelist[img_index].crop(zoombox)
-        zoomed_img = zoomed_img.resize([zoomed_img.width*scale,zoomed_img.height*scale], resample = 0)
-
-        adj_w = (working_size[0]/2) - ((zoomed_img.width)/2)
-        adj_h = (working_size[1]/2) - ((zoomed_img.height)/2)
-        cropped_image = zoomed_img
-
-        zoomed_img = ImageTk.PhotoImage(image=zoomed_img)
-        canvas.itemconfig(image_id, image=zoomed_img)
-
-        zoomed = True
-        zoom_io = True
+        self.set_image()
 
 
-def next_image():
-    global img_index
+    def set_image(self):
 
-    save_image() #Saves current crop before moving on
+        simpleaudio.stop_all()
+        self.prog_bar["value"] = 0
+        self.canvas.delete('refline')
+        self.info_box.delete('1.0', 'end')
+        self.OCR_box.delete('1.0', 'end')
+        self.wave_canvas.delete('chopline','playline','wave_img')
 
-    if img_index == len(imagelist)-1:
-        img_index = 0
-    else:
-        img_index += 1
+        self.currentfile = self.input_files[self.img_index]
+        #Needed to redefine the new current image
 
-    set_image()
-    lookup()
+        current_thumbnail = (self.currentfile.image).copy()
+        current_thumbnail.thumbnail(self.working_size)
+        self.image_replace = ImageTk.PhotoImage(current_thumbnail)
+        self.canvas.itemconfig(self.image_id, image=self.image_replace)
 
-def prev_image():
-    global img_index
+        self.thumb_cropbox = (0,0, self.currentfile.image.width,self.currentfile.image.height)
+        self.cropped_image = current_thumbnail
 
-    save_image() #Saves current crop before moving on
+        self.adj_w = (self.working_size[0]/2) - ((self.cropped_image.width)/2)
+        self.adj_h = (self.working_size[1]/2) - ((self.cropped_image.height)/2)
 
-    if img_index > 0:
-        img_index -= 1
-    else:
-        img_index = len(imagelist)-1
+        self.seen_images.add(self.img_index)
 
-    set_image()
-    lookup()
+        self.OCR_box.insert('1.0', self.currentfile.OCR_text)
 
-def reset_image():
-    global imagelist
-    
-    original_image = Image.open(src_folder+'/'+image_files[img_index])
-    imagelist[img_index] = original_image
+        if self.currentfile.type == 'video':
+            self.EnableButtons()
+            self.audio_file = self.currentfile.audio
+            self.sound = AudioSegment.from_file(self.audio_file, format('wav'))
+            self.end_time = len(self.sound)
+            self.prog_bar["to"] = self.end_time
+            self.wave_ratio = self.wave_size[0]/self.end_time
+            self.waveform_image = ImageTk.PhotoImage(self.currentfile.waveform.resize(self.wave_size))
+            self.wave_canvas.create_image(self.wave_size[0]/2,self.wave_size[1]/2,image=self.waveform_image, tags='wave_img')
 
-    set_image()
-
-
-def set_image():
-    global cropped_image, adj_w,adj_h
-    global image_replace # to stop it getting deleted from memory
-    global thumb_cropbox
-
-    #If you tidy this be very aware of the memory cache! (it is not deleted immediately)
-    #That is why we have image_replace set to global, to make sure it doesn't get deleted from memory
-
-    canvas.delete('refline')
-    info_box.delete('1.0', 'end')
-    OCR_box.delete('1.0', 'end')
-
-    current_thumbnail = imagelist[img_index].copy()
-    current_thumbnail.thumbnail(working_size)
-    image_replace = ImageTk.PhotoImage(current_thumbnail)
-    canvas.itemconfig(image_id, image=image_replace)
-
-    thumb_cropbox = thumb_cropbox = (0,0,   imagelist[img_index].width,imagelist[img_index].height)
-    cropped_image = current_thumbnail
-
-    adj_w = (working_size[0]/2) - ((cropped_image.width)/2)
-    adj_h = (working_size[1]/2) - ((cropped_image.height)/2)
-
-    seen_images.add(img_index)
-    
-def lookup():
-    global anki_txt
-    
-    jptextfinder = re.compile(r'''[\u4E00-\u9FBF|\u3005-\u30FF]+''')
-    filename_keywords = jptextfinder.findall(image_files[img_index])
-
-    squiggle_word = re.compile(r'''(?:{)(.+?)(?:})''')
-    OCR_text_box = OCR_box.get('1.0','end').strip()
-
-    keywords = filename_keywords
-    expression = ("・").join(filename_keywords)
-
-    if filename_keywords:
-        meanings = [jp.jplookup(keyword) for keyword in filename_keywords]
-
-    elif OCR_text_box != '':
-        OCR_keywords = squiggle_word.findall(OCR_text_box)
-        meanings = [jp.jplookup(keyword) for keyword in OCR_keywords]
-        keywords = OCR_keywords
-        expression = OCR_text_box
+            if self.currentfile.ChopPoint:
+                self.wave_canvas.create_line(self.currentfile.ChopPoint*self.wave_ratio,0,self.currentfile.ChopPoint*self.wave_ratio,self.wave_size[1], width=2, fill='red', tags='chopline')
 
 
-    else:
-        meanings = ["No lookup word found in file: " + image_files[img_index]]
+        else:
+            self.DisableButtons()
         
-    for i in range(len(keywords)):
-        info_box.insert('1.0', keywords[i] + "\n--------\n" + meanings[i][0] + "\n\n")
-    
-    expression = expression.replace('\n','<br />').replace('{','<span class="keyword" style="color:#cb4b16">').replace("}","</span>")
-    reading = jp.generate_furigana(expression)
+    def lookup(self):
+        
+        jptextfinder = re.compile(r'''[\u4E00-\u9FBF|\u3005-\u30FF]+''')
+        filename_keywords = jptextfinder.findall(self.currentfile.filename)
 
-    anki_txt[img_index] = f'''{expression}\t{reading}\t{("<br />").join([i[0] for i in meanings])}\t'<img src="{image_files[img_index]}">\t'''
+        squiggle_word = re.compile(r'''(?:{)(.+?)(?:})''')
+        OCR_text_box = self.OCR_box.get('1.0','end').strip()
 
-def save_image():
-    global imagelist
+        self.currentfile.keywords = filename_keywords
+        expression = ("・").join(filename_keywords)
 
-    imagelist[img_index] = imagelist[img_index].crop(box=thumb_cropbox)
+        if filename_keywords:
+            self.currentfile.meanings = [jp.jplookup(keyword) for keyword in filename_keywords]
 
-def delete_image():
-    global image_files
-    global imagelist
-    global anki_txt
-    global seen_images
+        elif OCR_text_box != '':
+            OCR_keywords = squiggle_word.findall(OCR_text_box)
+            self.currentfile.meanings = [jp.jplookup(keyword) for keyword in OCR_keywords]
+            self.currentfile.keywords = OCR_keywords
+            expression = OCR_text_box
 
-    del image_files[img_index]
-    del imagelist[img_index]
-    del anki_txt[img_index]
-    seen_images.remove(img_index)
 
-    set_image()
-    lookup()
+        else:
+            self.currentfile.meanings = ["No lookup word found in file: " + self.currentfile.filename]
+            
+        foo = [self.currentfile.keywords[i]+"\n--------\n"+self.currentfile.meanings[i][0]+'\n\n' for i in range(len(self.currentfile.keywords))]
+        self.info_box.insert('1.0', "".join(foo))
+        self.currentfile.expression = expression.replace('\n','<br />').replace('{','<span class="keyword" style="color:#cb4b16">').replace("}","</span>")
+        self.currentfile.reading = jp.generate_furigana(self.currentfile.expression)
 
+        self.anki_txt[self.img_index] = f'''{self.currentfile.expression}\t{self.currentfile.reading}\t{("<br />").join([i[0] for i in self.currentfile.meanings])}\t'<img src="{self.currentfile.image}">\t'''
 
-def export():
+    def save_image(self):
+        self.OCR_text = self.OCR_box.get('1.0','end').strip()
+        self.currentfile.image = self.currentfile.image.crop(box=self.thumb_cropbox)
 
-    save_image()
+    def delete_image(self):
 
-    with open(src_folder+"Manga_export.txt", "w") as output:
-        output.write(("\n").join([anki_txt[i] for i in seen_images]))
+        del self.currentfile.image
+        del self.currentfile.image
+        del self.anki_txt[self.img_index]
+        self.seen_images.remove(self.img_index)
 
-    [i.save(anki_folder+f"{image_files[imagelist.index(i)]}") for i in seen_images]
-    
-    print("\nExported.")
-    print("txt saved to: " + src_folder+"Manga_export.txt")
-    print("Images saved anki media folder ("+anki_folder+")")
+        self.set_image()
+        self.lookup()
 
-def Google_OCR():
-    
-    img_src = f'{src_folder}{image_files[img_index]}'
 
-    with io.open(img_src, 'rb') as img_file:
-        content = img_file.read()
+    def export(self):
+        self.save_image()
+        import csv
 
-    image = vision.types.Image(content=content)
+        thewriter = csv.writer(open(self.csvfile, 'w'))
 
-    response = client.document_text_detection(image=image, image_context={"language_hints": ["ja"]})
-    ocr_text = response.full_text_annotation.text.strip()
+        for i in self.seen_images:
+            file = self.input_files[i]
+            thewriter.writerow((file.expression , file.reading , "<br />".join(file.meanings) , f'<img src = "{file.filename}.jpg" />' , file.soundfile))
 
-    OCR_box.insert('1.0', ocr_text)
+            file.image.save(f'{self.anki_folder}{file.filename}.jpg')
 
+            if file.type == 'video':
+                audioexp = file.sound[file.ChopPoint:]
+                audioexp.export(f"{self.anki_folder}{file.filename}.mp3", format="mp3")
 
-def play_audio():
+        """
+        with open(txtfile+'.csv', 'w', newline='') as csvfile: #creates a new file 'ankitest.csv' in write mode
 
-    global end_time
-    global audio_time
+        thewriter = csv.writer(self.csvfile)  #Creates a function called "the writer" and sends it csv file aka 'ankitest.csv'
+        thewriter.writerows(csvrows) #Calls that function and tells it to write the rows in 'csv rows', our zipped file, to the newly created csv file as csv rows
 
-    audio_time = prog_bar.get()
-    playback_sound = sound[audio_time:end_time]
 
-    simpleaudio.stop_all()
-    
-    if bar_update:
-        root.after_cancel(bar_update)
+        self.save_image()
 
-    playback = _play_with_simpleaudio(playback_sound)
+        anki_txt = []
+        thisfile = self.currentfile
+        for i in seen_images:
+            f'{self.currentfile.expression},{self.currentfile.reading},{self.currentfile.meanings}'
 
-    audio_bar()
+        with open(self.src_folder+"Manga_export.txt", "w") as output:
+            output.write(("\n").join([self.anki_txt[i] for i in self.seen_images]))
 
-def audio_bar():
-    global audio_time
-    global bar_update
+        [i.save(self.anki_folder+f"{self.currentfile.image[self.imagelist.index(i)]}") for i in self.seen_images]
+        
+        print("\nExported.")
+        print("txt saved to: " + self.src_folder+"Manga_export.txt")
+        print("Images saved anki media folder ("+self.anki_folder+")")
+        """
 
-    audio_time += 20
+    def Google_OCR(self):
+        self.currentfile.img_src.seek(0)
+        image = vision.types.Image(content=self.currentfile.img_src.read())
 
-    prog_bar["value"] = audio_time
-    if audio_time < end_time:
-        bar_update = root.after(20, audio_bar)
+        response = client.document_text_detection(image=image, image_context={"language_hints": ["ja"]})
+        ocr_text = response.full_text_annotation.text.strip()
 
+        self.OCR_box.insert('1.0', ocr_text)
 
-def pause_audio():
 
-    if bar_update:
-        root.after_cancel(bar_update)
+    def play_audio(self):
+        if self.currentfile.type == 'video':
 
-    simpleaudio.stop_all()
+            self.audio_time = self.prog_bar.get()
+            playback_sound = self.currentfile.sound[self.audio_time:self.end_time]
 
-    current_time = prog_bar.get()
-    print(current_time)
+            simpleaudio.stop_all()
+            
+            if self.bar_update:
+                self.master.after_cancel(self.bar_update)
 
-def replay_audio():
-    
-    prog_bar["value"] = 0
-    play_audio()
+            playback = _play_with_simpleaudio(playback_sound)
 
-def chop_audio():
-    pass
+            self.audio_bar()
+        else:
+            pass
 
+    def audio_bar(self):
 
-# --- define images ----
+        self.wave_canvas.delete('playline')
+        self.audio_time += 100
 
-img_index = 0
-#This is iterated over later
+        self.prog_bar["value"] = self.audio_time
 
-seen_images = set()
-#A set we will add to
+        if self.audio_time < self.end_time:
+            self.bar_update = self.master.after(100, self.audio_bar)
+            self.wave_canvas.create_line(self.audio_time*self.wave_ratio,0,self.audio_time*self.wave_ratio,self.wave_size[1], width=1, fill='orange', tags='playline')
 
-zoom_io = False
-zoomed = False
+    def scrub(self, position):
+        self.wave_canvas.delete('playline')
+        self.audio_time = self.prog_bar.get()
 
-working_size = (600, 600)
-outerbr_width = 15
+        self.wave_canvas.create_line(self.audio_time*self.wave_ratio,0,self.audio_time*self.wave_ratio,self.wave_size[1], width=1, fill='orange', tags='playline')
 
-anki_folder = '/Users/earth/Library/Application Support/Anki2/User 1/collection.media/'
-#anki_folder = '/Users/earth/Downloads/'
+    def pause_audio(self):
 
-src_folder = '/Users/earth/Documents/Japanese/Media/Manga/OCR screens/'
+        if self.bar_update:
+            self.master.after_cancel(self.bar_update)
 
-file_list = os.listdir(src_folder)
-video_files = [i for i in file_list if i[-4:] in ['.mov']]
+        simpleaudio.stop_all()
+        current_time = self.prog_bar.get()
 
-image_files = [i for i in os.listdir(src_folder) if i[-4:] in ['.jpg','.jpeg','.png']]
-imagelist = [Image.open(src_folder+filename) for filename in image_files]
+    def replay_audio(self):
+        
+        self.prog_bar["value"] = self.currentfile.ChopPoint
+        self.play_audio()
 
-anki_txt = ['' for i in file_list]
+    def chop_audio(self):
+        current_time = self.prog_bar.get()
+        self.currentfile.ChopPoint = current_time
+        self.wave_canvas.delete('chopline')
+        self.wave_canvas.create_line(current_time*self.wave_ratio,0,current_time*self.wave_ratio,self.wave_size[1], width=2, fill='red', tags='chopline')
 
-thumb_cropbox = (0,0,   imagelist[img_index].width,imagelist[img_index].height)
-#Tells the program the initial thumbnail is an exact proportion to the initial image (this is updated with the new shape when we crop)
 
-current_thumbnail = imagelist[img_index].copy()
-current_thumbnail.thumbnail(working_size)
+    def DisableButtons(self):
+        self.play_button["state"] = "disabled"
+        self.pause_button["state"] = "disabled"
+        self.reload_button["state"] = "disabled"
+        self.chop_button["state"] = "disabled"
+        self.prog_bar.state(['disabled'])
 
-main_image = ImageTk.PhotoImage(image=current_thumbnail)
+    def EnableButtons(self):
+        self.play_button["state"] = "normal"
+        self.pause_button["state"] = "normal"
+        self.reload_button["state"] = "normal"
+        self.chop_button["state"] = "normal"
+        self.prog_bar.state(['!disabled'])
 
-cropped_image = current_thumbnail
+    def meaning_choice(self, choice):
+        print(choice)
 
+    def test(self):
 
-audio_file = '/Users/earth/Desktop/GAME/EXPORT/11.5.mp3'
-sound = AudioSegment.from_file(audio_file, format('mp3'))
-waveform_img = Image.open('/Users/earth/Desktop/GAME/EXPORT/lucas.png')
-waveform_img = waveform_img.resize((300,100))
-waveform_img = ImageTk.PhotoImage(waveform_img)
+        choice_list = ["掛[か]ける: 1. to hang (e.g. picture)/to hoist (e.g. sail)/to raise (e.g. flag) 2. to sit 3. to take (time, money)/to expend (money, time, etc.) 4. to make (a call) 5. to multiply 6. to secure (e.g. lock) 7. to put on (glasses, etc.) 8. to cover 9. to burden someone 10. to apply (insurance) 11. to turn on (an engine, etc.)/to set (a dial, an alarm clock, etc.) 12. to put an effect (spell, anaesthetic, etc.) on 13. to hold an emotion for (pity, hope, etc.) 14. to bind 15. to pour (or sprinkle, spray, etc.) onto 16. to argue (in court)/to deliberate (in a meeting)/to present (e.g. idea to a conference, etc.) 17. to increase further 18. to catch (in a trap, etc.) 19. to set atop 20. to erect (a makeshift building) 21. to hold (a play, festival, etc.) 22. to wager/to bet/to risk/to stake/to gamble 23. to be partway doing .../to begin (but not complete) .../to be about to ... 24. indicates (verb) is being directed to (someone)",
+                        "駆[か]ける: 1. to run (race, esp. horse)/to dash 2. to gallop (one's horse)/to canter 3. to advance (against one's enemy)",
+                        "欠[か]ける: 1. to be chipped/to be damaged/to be broken 2. to be lacking/to be missing 3. to be insufficient/to be short/to be deficient/to be negligent toward 4. (of the moon) to wane/to go into eclipse",
+                        "賭[か]ける: to wager/to bet/to risk/to stake/to gamble",
+                        "翔[かけ]る: 1. to soar/to fly 2. to run/to dash",
+                        "架[か]ける: to suspend between two points/to build (a bridge, etc.)/to put up on something (e.g. legs up on table)"]
+        
+        #buttons = []
 
-end_time = len(sound)
+        listbox = tk.Listbox(self.options_frame, selectmode='single')
+        listbox.grid(row=1, columnspan=2)
 
-audio_time = 0
-bar_update = None
+        for i in range(len(choice_list)):
+            choice = choice_list[i]
+            listbox.insert('end', choice)
 
+def TK_LOOP(): 
+    root = tk.Tk()
+    app = mainwindow(root)
+    root.mainloop()
 
-# --- GUI elements and bindings ---
-
-#Frames
-canvas_frame = tk.Frame(root, borderwidth= outerbr_width, relief = "sunken")
-info_frame = tk.Frame(root, borderwidth= 5, relief = "sunken")
-player_frame = tk.Frame(info_frame, height= 100, width = 100, borderwidth= 1, relief = "sunken")
-
-
-canvas_frame.bind('<Button-1>', outer_click)
-canvas_frame.bind('<B1-Motion>', ref_line)
-
-# Canvas
-canvas = tk.Canvas(canvas_frame, width=working_size[0], height=working_size[1])
-canvas.bind("<Button-1>", click)
-canvas.bind("<B1-Motion>", click_move)
-canvas.bind("<ButtonRelease-1>", upclick)
-
-# Buttons
-reset_button = ttk.Button(root, text="RESET", command=reset_image)
-prev_button = ttk.Button(root, text="Previous Image", command= prev_image)
-next_button = ttk.Button(root, text="Next Image", command= next_image)
-save_button = ttk.Button(root, text="Delete", command= delete_image)
-
-zoom_button = ttk.Button(info_frame, text="Zoom", command=toggle_zoom)
-
-OCR_button = ttk.Button(info_frame, text="OCR", command = Google_OCR)
-lookup_button = ttk.Button(info_frame, text="Lookup", command = lookup)
-export_button = ttk.Button(info_frame, text="Export", command = export)
-box_remove_button = ttk.Button(info_frame, text="Remove box", command = lambda: box_removal(canvas.coords(refline)))
-
-#Audio player
-play_button = ttk.Button(player_frame, text="▶", width=2, command = play_audio)
-pause_button = ttk.Button(player_frame, text="❚❚", width=2, command = pause_audio)
-reload_button = ttk.Button(player_frame, text="⟳", width=2, command=replay_audio)
-chop_button = ttk.Button(player_frame, text="✂", width=2, command=chop_audio)
-waveform = ttk.Label(player_frame, image=waveform_img)
-prog_bar = ttk.Scale(player_frame, orient='horizontal', length=300, from_=1.0, to=end_time)
-
-#OCR_output
-OCR_box = tk.Text(info_frame, width = 45, height = 5, borderwidth=2, relief="sunken", wrap='word')
-
-#Info box
-info_box = tk.Text(info_frame, width = 45, borderwidth=2, relief="sunken", wrap='word')
-info_scroll = ttk.Scrollbar(info_frame, orient='vertical', command=info_box.yview)
-info_box.configure(yscrollcommand=info_scroll.set)
-
-
-
-
-
-# -- Gridding --
-
-canvas.grid()
-
-canvas_frame.grid(row=1, column=0, columnspan= 4)
-info_frame.grid(row=0, rowspan=2, column=4, sticky='N,S')
-player_frame.grid(row = 8, columnspan = 2)
-
-OCR_box.grid(row=0,column=0, sticky='N')
-
-info_box.grid(row=1, column=0)
-info_scroll.grid(row=1, column=1, sticky='N,S,W')
-
-export_button.grid(row=2, columnspan=2, sticky='S')
-zoom_button.grid(row = 3, columnspan= 2)
-box_remove_button.grid(row=4, columnspan=2)
-OCR_button.grid(row=5, columnspan=2)
-lookup_button.grid(row=6, columnspan=2)
-
-reset_button.grid(row=0, column = 0)
-prev_button.grid(row=0, column=1)
-next_button.grid(row=0, column= 2)
-save_button.grid(row=0, column =3)
-
-play_button.grid(row=0, column=1)
-pause_button.grid(row=0, column=2)
-reload_button.grid(row=0, column=3)
-chop_button.grid(row=0, column=4)
-prog_bar.grid(row=1, columnspan=5)
-waveform.grid(row=2, columnspan=5)
-
-
-# -- Changing elements
-
-# set first image on canvas
-image_id = canvas.create_image(working_size[0]/2, working_size[1]/2, image=main_image)
-#The values we need to offset our coordinates by for them to be accurate
-adj_w = (working_size[0]/2) - ((cropped_image.width)/2)
-adj_h = (working_size[1]/2) - ((cropped_image.height)/2)
-
-
-set_image()
-lookup()
-
-# ---- end loop ----
-root.mainloop()
+if __name__ == '__main__':
+    TK_LOOP()
