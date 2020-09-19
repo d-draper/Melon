@@ -17,8 +17,6 @@ import simpleaudio
 from pydub.playback import _play_with_simpleaudio, play
 from pydub import AudioSegment
 
-from moviepy.editor import *
-
 ############################################################
 
 from google.oauth2 import service_account
@@ -291,7 +289,7 @@ def prev_image():
 def reset_image():
     global imagelist
     
-    original_image = original_images[img_index]
+    original_image = Image.open(src_folder+'/'+image_files[img_index])
     imagelist[img_index] = original_image
 
     set_image()
@@ -326,7 +324,7 @@ def lookup():
     global anki_txt
     
     jptextfinder = re.compile(r'''[\u4E00-\u9FBF|\u3005-\u30FF]+''')
-    filename_keywords = jptextfinder.findall(file_list[img_index])
+    filename_keywords = jptextfinder.findall(image_files[img_index])
 
     squiggle_word = re.compile(r'''(?:{)(.+?)(?:})''')
     OCR_text_box = OCR_box.get('1.0','end').strip()
@@ -345,7 +343,7 @@ def lookup():
 
 
     else:
-        meanings = ["No lookup word found in file: " + file_list[img_index]]
+        meanings = ["No lookup word found in file: " + image_files[img_index]]
         
     for i in range(len(keywords)):
         info_box.insert('1.0', keywords[i] + "\n--------\n" + meanings[i][0] + "\n\n")
@@ -353,7 +351,7 @@ def lookup():
     expression = expression.replace('\n','<br />').replace('{','<span class="keyword" style="color:#cb4b16">').replace("}","</span>")
     reading = jp.generate_furigana(expression)
 
-    anki_txt[img_index] = f'''{expression}\t{reading}\t{("<br />").join([i[0] for i in meanings])}\t'<img src="{file_list[img_index]}">\t'''
+    anki_txt[img_index] = f'''{expression}\t{reading}\t{("<br />").join([i[0] for i in meanings])}\t'<img src="{image_files[img_index]}">\t'''
 
 def save_image():
     global imagelist
@@ -363,12 +361,10 @@ def save_image():
 def delete_image():
     global image_files
     global imagelist
-    global original_audio
     global anki_txt
     global seen_images
 
-    del original_images[img_index]
-    del original_audio[img_index]
+    del image_files[img_index]
     del imagelist[img_index]
     del anki_txt[img_index]
     seen_images.remove(img_index)
@@ -471,43 +467,8 @@ anki_folder = '/Users/earth/Library/Application Support/Anki2/User 1/collection.
 
 src_folder = '/Users/earth/Documents/Japanese/Media/Manga/OCR screens/'
 
-video_exts = ['.mov']
-image_exts = ['.jpeg','.jpg','.png']
-file_exts = video_extensions + image_extensions
-
-buff = io.BytesIO()
-
-file_list = [i for i in os.listdir(src_folder) if i[-4:] in file_exts]
-original_images = []
-original_audio = []
-imagelist = [i.copy()for i in original_images]
-
-for i in file_list:
-    if file[-4:] in video_exts:
-        file_video = VideoFileClip(f'{src_folder}{file}')
-        file_audio = AudioFileClip(f'{src_folder}{file}')
-
-        file_video = file_video.resize(height=450)
-
-        buff.seek(0)
-        videoclip.save_frame(buff, t=file_video.end)
-        screenshot = buff
-        buff.flush()
-
-        file_audio = file_audio.subclip(10)
-        file_audio.write_audiofile(buff)
-        buff.seek(0)
-        audioclip = wave.open(buff,'r')
-        buff.flush()
-
-        original_images.append(screenshot)
-        original_audio.append(audioclip)
-
-    elif file[-4:] in image_exts:
-        screenshot = Image.open(f'{src_folder}{file}')
-        original_images.append(screenshot)
-        original_audio.append(None)
-
+file_list = os.listdir(src_folder)
+video_files = [i for i in file_list if i[-4:] in ['.mov']]
 
 image_files = [i for i in os.listdir(src_folder) if i[-4:] in ['.jpg','.jpeg','.png']]
 imagelist = [Image.open(src_folder+filename) for filename in image_files]
