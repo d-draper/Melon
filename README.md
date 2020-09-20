@@ -2,7 +2,7 @@
 
 Melon is a Python program for creating fully featured [Anki](https://apps.ankiweb.net/) format flashcards from images and video clips
 
-##Features
+## Features
 **Lookup**
 
 *Melon* uses [EDICT](https://www.edrdg.org/jmdict/edict.html) to provide English definitions of any word highlighted by the user.
@@ -38,10 +38,10 @@ It can also zoom in to allow you to do this with more precision
 *Melon* will export all media generated with the program (images and audio) along side a CSV file formatted to display beautifully in Anki
 Reccomended to use alongside the Melon Anki template (TBC)
 
-##Installation
+## Installation
 WIP
 
-##Goals / to do
+## Goals / to do
 - Add requirements.txt (**urgent**)
 - Installation section
 - When a word has multiple definitions, give the user a graphical prompt to choose the correct one
