@@ -42,21 +42,21 @@ Reccomended to use alongside the Melon Anki template (TBC)
 WIP
 
 ## Goals / to do
-- Add requirements.txt (**urgent**)
-- Installation section
-- When a word has multiple definitions, give the user a graphical prompt to choose the correct one
-- Allow user to configure the directory of the clips to be processed
-- Allow user to provide their own Google API key for OCRing text
-- Convert the application from TkInter to PyQt
-- Create a web based application
-- Reduce the dependencies:
-    - Simpler way to show waveform, without needing matplotlib
-    - Divide images without blend_modes import (or remove divide function)
-    - Remove all JamDict dependecy from JpVerb
-- Redesign UI to be more intuitive and less ugly
-- Allow user to choose Hiragana or Katakana only for Furigana
-- Allow APKG ecxport
-- Upload Melon Anki Template repo
+- [x] ~~Add requirements.txt (**urgent**) Done~~
+- [] Installation section
+- [] When a word has multiple definitions, give the user a graphical prompt to choose the correct one
+- [] Allow user to configure the directory of the clips to be processed
+- [] Allow user to provide their own Google API key for OCRing text
+- [] Convert the application from TkInter to PyQt
+- [] Create a web based application
+- [] Reduce the dependencies:
+    - [] Simpler way to show waveform, without needing matplotlib
+    - [] Divide images without blend_modes import (or remove divide function)
+    - [] Remove all JamDict dependecy from JpVerb
+- [] Redesign UI to be more intuitive and less ugly
+- [] Allow user to choose Hiragana or Katakana only for Furigana
+- [] Allow APKG ecxport
+- [] Upload Melon Anki Template repo
 
 ## License
 [AGPL 3.0](https://choosealicense.com/licenses/agpl-3.0/)
