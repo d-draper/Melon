@@ -1,12 +1,14 @@
 ############################################################
 
-# Manga to Anki, V2
-# 01/09/2020 Momodath
+# Melon, V0.3
+# 21/09/2020 Daniel Draper
 
 ############################################################
 
 import tkinter as tk
 from tkinter import ttk
+
+from tkinter import filedialog
 
 import os, io, csv, re, numpy, blend_modes, wave, ffmpeg
 import matplotlib.pyplot as plt
@@ -30,15 +32,16 @@ client = vision.ImageAnnotatorClient(credentials=credential_json)
 
 ############################################################
 
-
 class mainwindow:
     image_exts = ['jpg','jpeg','png']
     movie_exts = ['mov']
-
     
+
+#    src_folder = filedialog.askdirectory()+"/"
+#    print(src_folder)
+
     anki_folder = '/Users/earth/Library/Application Support/Anki2/User 1/collection.media/'
     anki_folder = '/Users/earth/Downloads/'
-    src_folder = '/Users/earth/Documents/Japanese/Media/Manga/OCR screens/'
 
     def __init__(self, master):
 
@@ -62,26 +65,6 @@ class mainwindow:
         #anki_folder = '/Users/earth/Downloads/'
 
         #self.src_folder = '/Users/earth/Documents/Japanese/Media/Manga/OCR screens/'
-
-        self.file_list = os.listdir(self.src_folder)
-        self.input_files = [self.Filetype(file) for file in self.file_list]
-        self.input_files = [self.Filetype.Filesplit(file) for file in self.input_files if file.type != 'none']
-
-
-        self.currentfile = self.input_files[self.img_index]
-
-        self.anki_txt = ['' for i in self.file_list]
-        self.thumb_cropbox = (0,0, self.currentfile.image.width, self.currentfile.image.height)
-        #Tells the program the initial thumbnail is an exact proportion to the initial image (this is updated with the new shape when we crop)
-
-        # --- Defaults
-        self.current_thumbnail = self.currentfile.image.copy()
-        self.current_thumbnail.thumbnail(self.working_size)
-        self.main_image = ImageTk.PhotoImage(image=self.current_thumbnail)
-
-        self.cropped_image = self.current_thumbnail
-        self.audio_time = 0
-        self.bar_update = None
 
 
         # --- GUI elements and bindings ---
@@ -114,6 +97,10 @@ class mainwindow:
         self.lookup_button = ttk.Button(self.master, text="Lookup", command = self.lookup)
         self.box_remove_button = ttk.Button(self.master, text="Remove box", command = lambda: self.box_removal(self.canvas.coords('refline')))
         self.export_button = ttk.Button(self.master, text="Export", command = self.export)
+        self.open_dir_button = ttk.Button(self.master, text="OPEN", command = self.open_dir)
+        #TEST button (for testing new features)
+        self.test_button = ttk.Button(self.master, text="TEST", command = self.test)
+
 
         #Audio player
         self.play_button = ttk.Button(self.player_frame, text="▶", width=2, command = self.play_audio)
@@ -151,7 +138,10 @@ class mainwindow:
         self.reset_button.grid(row=0, column = 0)
         self.prev_button.grid(row=0, column=1)
         self.next_button.grid(row=0, column= 2)
-        self.save_button.grid(row=0, column= 4)
+        self.save_button.grid(row=0, column= 3)
+        self.open_dir_button.grid(row=0, column=4)
+        #TEST BUTTON
+        #self.test_button.grid(row=0, column= 5)
 
         self.output_frame.grid(row=0,column=0, sticky='N')
         self.OCR_box.grid(row=0,column=0, columnspan=2, sticky='N')
@@ -171,104 +161,6 @@ class mainwindow:
         self.wave_canvas.grid(row=3, columnspan=5)
 
         self.options_text.grid(row=0, columnspan=2, sticky='N')
-
-        # -- Changing elements
-
-        # set first image on canvas
-        self.image_id = self.canvas.create_image(self.working_size[0]/2, self.working_size[1]/2, image=self.main_image)
-        #The values we need to offset our coordinates by for them to be accurate
-        self.adj_w = (self.working_size[0]/2) - ((self.cropped_image.width)/2)
-        self.adj_h = (self.working_size[1]/2) - ((self.cropped_image.height)/2)
-
-
-        self.set_image()
-        self.lookup()
-
-    class Filetype:
-        def __init__(self, file):
-
-            file_ext = file.split(".")[-1]
-
-            self.filename = file.split(".")[0]
-            self.file_src = file
-
-            if file_ext in mainwindow.movie_exts:
-                self.type = 'video'
-
-            elif file_ext in mainwindow.image_exts:
-                self.type = 'image'
-
-            else:
-                self.type = 'none'
-
-        def Filesplit(file):
-
-            file.OCR_text = ''
-            file.ChopPoint = 0
-            file.meanings = ''
-            file.formatted_meanings = ''
-
-            if file.type == 'video':
-
-                clip = f'{mainwindow.src_folder}{file.file_src}'
-                #FFMPEG pull last frame as png
-
-                try:
-                    imagebytes, _ = (
-                    ffmpeg
-                    .input(clip, sseof=-0.1)
-                    .output(f'pipe:', vframes=1, format='image2', vcodec='png')
-                    .run(capture_stdout=True, capture_stderr=True)
-                    )
-
-                except ffmpeg.Error as e:
-                    print('stdout:', e.stdout.decode('utf8'))
-                    print('stderr:', e.stderr.decode('utf8'))
-                    raise e
-
-                imagedata = io.BytesIO(imagebytes)
-                file.img_src = imagedata
-
-                file.image = Image.open(imagedata)
-                
-                #FFMPEG rip audio as wav
-                audiobytes, _ = (
-                ffmpeg
-                .input(clip)
-                .output('pipe:', format='wav')
-                .run(capture_stdout=True)
-                )
-
-                file.audio = io.BytesIO(audiobytes)
-
-                buf = io.BytesIO()
-                buf.seek(0)
-
-                wave_file = wave.open(file.audio, "r")
-
-                # Extract Raw Audio from Wav File
-                signal = wave_file.readframes(-1)
-                signal = numpy.frombuffer(signal, "<i2")
-
-                fig = plt.figure(figsize=(25,10))
-                plt.plot(signal,color='#ff33af')
-                plt.gca().set_axis_off()
-                plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
-                plt.margins(0,0)
-                plt.savefig(buf,format='png',transparent=True, dpi=20)
-
-                file.waveform = Image.open(buf)
-                file.sound = AudioSegment.from_file(file.audio, format('wav'))
-                file.soundfile = f'[sound: {file.filename}.mp3]'
-
-                return file
-
-
-            elif file.type == 'image':
-                file.img_src = open(f'{mainwindow.src_folder}{file.file_src}','rb')
-                file.image = Image.open(f'{mainwindow.src_folder}{file.file_src}')
-                file.soundfile = None
-                return file
 
 
     # --- Regular functions ---
@@ -631,29 +523,6 @@ class mainwindow:
                 audioexp = file.sound[file.ChopPoint:]
                 audioexp.export(f"{self.anki_folder}{file.filename}.mp3", format="mp3")
 
-        """
-        with open(txtfile+'.csv', 'w', newline='') as csvfile: #creates a new file 'ankitest.csv' in write mode
-
-        thewriter = csv.writer(self.csvfile)  #Creates a function called "the writer" and sends it csv file aka 'ankitest.csv'
-        thewriter.writerows(csvrows) #Calls that function and tells it to write the rows in 'csv rows', our zipped file, to the newly created csv file as csv rows
-
-
-        self.save_image()
-
-        anki_txt = []
-        thisfile = self.currentfile
-        for i in seen_images:
-            f'{self.currentfile.expression},{self.currentfile.reading},{self.currentfile.meanings}'
-
-        with open(self.src_folder+"Manga_export.txt", "w") as output:
-            output.write(("\n").join([self.anki_txt[i] for i in self.seen_images]))
-
-        [i.save(self.anki_folder+f"{self.currentfile.image[self.imagelist.index(i)]}") for i in self.seen_images]
-        
-        print("\nExported.")
-        print("txt saved to: " + self.src_folder+"Manga_export.txt")
-        print("Images saved anki media folder ("+self.anki_folder+")")
-        """
 
     def Google_OCR(self):
         self.currentfile.img_src.seek(0)
@@ -736,8 +605,42 @@ class mainwindow:
     def meaning_choice(self, choice):
         print(choice)
 
-    def test(self):
+    def open_dir(self):
+        mainwindow.src_folder = filedialog.askdirectory()+"/"
 
+        self.file_list = os.listdir(self.src_folder)
+        self.input_files = [Filetype(file) for file in self.file_list]
+        self.input_files = [Filetype.Filesplit(file) for file in self.input_files if file.type != 'none']
+
+
+        self.currentfile = self.input_files[self.img_index]
+
+        self.anki_txt = ['' for i in self.file_list]
+        self.thumb_cropbox = (0,0, self.currentfile.image.width, self.currentfile.image.height)
+        #Tells the program the initial thumbnail is an exact proportion to the initial image (this is updated with the new shape when we crop)
+
+        # --- Defaults
+        self.current_thumbnail = self.currentfile.image.copy()
+        self.current_thumbnail.thumbnail(self.working_size)
+        self.main_image = ImageTk.PhotoImage(image=self.current_thumbnail)
+
+        self.cropped_image = self.current_thumbnail
+        self.audio_time = 0
+        self.bar_update = None
+
+        # -- Changing elements
+
+        # set first image on canvas
+        self.image_id = self.canvas.create_image(self.working_size[0]/2, self.working_size[1]/2, image=self.main_image)
+        #The values we need to offset our coordinates by for them to be accurate
+        self.adj_w = (self.working_size[0]/2) - ((self.cropped_image.width)/2)
+        self.adj_h = (self.working_size[1]/2) - ((self.cropped_image.height)/2)
+
+
+        self.set_image()
+        self.lookup()
+
+    def test(self):
         choice_list = ["掛[か]ける: 1. to hang (e.g. picture)/to hoist (e.g. sail)/to raise (e.g. flag) 2. to sit 3. to take (time, money)/to expend (money, time, etc.) 4. to make (a call) 5. to multiply 6. to secure (e.g. lock) 7. to put on (glasses, etc.) 8. to cover 9. to burden someone 10. to apply (insurance) 11. to turn on (an engine, etc.)/to set (a dial, an alarm clock, etc.) 12. to put an effect (spell, anaesthetic, etc.) on 13. to hold an emotion for (pity, hope, etc.) 14. to bind 15. to pour (or sprinkle, spray, etc.) onto 16. to argue (in court)/to deliberate (in a meeting)/to present (e.g. idea to a conference, etc.) 17. to increase further 18. to catch (in a trap, etc.) 19. to set atop 20. to erect (a makeshift building) 21. to hold (a play, festival, etc.) 22. to wager/to bet/to risk/to stake/to gamble 23. to be partway doing .../to begin (but not complete) .../to be about to ... 24. indicates (verb) is being directed to (someone)",
                         "駆[か]ける: 1. to run (race, esp. horse)/to dash 2. to gallop (one's horse)/to canter 3. to advance (against one's enemy)",
                         "欠[か]ける: 1. to be chipped/to be damaged/to be broken 2. to be lacking/to be missing 3. to be insufficient/to be short/to be deficient/to be negligent toward 4. (of the moon) to wane/to go into eclipse",
@@ -753,6 +656,92 @@ class mainwindow:
         for i in range(len(choice_list)):
             choice = choice_list[i]
             listbox.insert('end', choice)
+
+class Filetype:
+    def __init__(self, file):
+
+        file_ext = file.split(".")[-1]
+
+        self.filename = file.split(".")[0]
+        self.file_src = file
+
+        if file_ext in mainwindow.movie_exts:
+            self.type = 'video'
+
+        elif file_ext in mainwindow.image_exts:
+            self.type = 'image'
+
+        else:
+            self.type = 'none'
+
+    def Filesplit(file):
+
+        file.OCR_text = ''
+        file.ChopPoint = 0
+        file.meanings = ''
+        file.formatted_meanings = ''
+
+        if file.type == 'video':
+
+            clip = f'{mainwindow.src_folder}{file.file_src}'
+            #FFMPEG pull last frame as png
+
+            try:
+                imagebytes, _ = (
+                ffmpeg
+                .input(clip, sseof=-0.1)
+                .output(f'pipe:', vframes=1, format='image2', vcodec='png')
+                .run(capture_stdout=True, capture_stderr=True)
+                )
+
+            except ffmpeg.Error as e:
+                print('stdout:', e.stdout.decode('utf8'))
+                print('stderr:', e.stderr.decode('utf8'))
+                raise e
+
+            imagedata = io.BytesIO(imagebytes)
+            file.img_src = imagedata
+
+            file.image = Image.open(imagedata)
+            
+            #FFMPEG rip audio as wav
+            audiobytes, _ = (
+            ffmpeg
+            .input(clip)
+            .output('pipe:', format='wav')
+            .run(capture_stdout=True)
+            )
+
+            file.audio = io.BytesIO(audiobytes)
+
+            buf = io.BytesIO()
+            buf.seek(0)
+
+            wave_file = wave.open(file.audio, "r")
+
+            # Extract Raw Audio from Wav File
+            signal = wave_file.readframes(-1)
+            signal = numpy.frombuffer(signal, "<i2")
+
+            fig = plt.figure(figsize=(25,10))
+            plt.plot(signal,color='#ff33af')
+            plt.gca().set_axis_off()
+            plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
+            plt.margins(0,0)
+            plt.savefig(buf,format='png',transparent=True, dpi=20)
+
+            file.waveform = Image.open(buf)
+            file.sound = AudioSegment.from_file(file.audio, format('wav'))
+            file.soundfile = f'[sound: {file.filename}.mp3]'
+
+            return file
+
+
+        elif file.type == 'image':
+            file.img_src = open(f'{mainwindow.src_folder}{file.file_src}','rb')
+            file.image = Image.open(f'{mainwindow.src_folder}{file.file_src}')
+            file.soundfile = None
+            return file
 
 def TK_LOOP(): 
     root = tk.Tk()
