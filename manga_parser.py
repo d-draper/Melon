@@ -40,8 +40,8 @@ class mainwindow:
 #    src_folder = filedialog.askdirectory()+"/"
 #    print(src_folder)
 
-    anki_folder = '/Users/earth/Library/Application Support/Anki2/User 1/collection.media/'
-    anki_folder = '/Users/earth/Downloads/'
+    #anki_folder = '/Users/earth/Library/Application Support/Anki2/User 1/collection.media/'
+    #anki_folder = '/Users/earth/Downloads/'
 
     def __init__(self, master):
 
@@ -141,7 +141,7 @@ class mainwindow:
         self.save_button.grid(row=0, column= 3)
         self.open_dir_button.grid(row=0, column=4)
         #TEST BUTTON
-        #self.test_button.grid(row=0, column= 5)
+        #self.test_button.grid(row=1, column= 0)
 
         self.output_frame.grid(row=0,column=0, sticky='N')
         self.OCR_box.grid(row=0,column=0, columnspan=2, sticky='N')
@@ -160,7 +160,7 @@ class mainwindow:
         self.prog_bar.grid(row=1, columnspan=5)
         self.wave_canvas.grid(row=3, columnspan=5)
 
-        self.options_text.grid(row=0, columnspan=2, sticky='N')
+        #self.options_text.grid(row=0, columnspan=2, sticky='N')
 
 
     # --- Regular functions ---
@@ -498,17 +498,19 @@ class mainwindow:
 
     def delete_image(self):
 
-        del self.currentfile.image
-        del self.currentfile.image
+        del self.input_files[self.img_index]
         del self.anki_txt[self.img_index]
         self.seen_images.remove(self.img_index)
-
-        self.set_image()
-        self.lookup()
+        self.prev_image()
 
 
     def export(self):
         self.save_image()
+
+        anki_msg = "Choose Anki media folder"
+        csv_msg = "Choose where to save CSV file"
+        self.anki_folder = filedialog.askdirectory(title = anki_msg, message = anki_msg, parent=self.master)+"/"
+        self.csvfile = filedialog.asksaveasfilename(initialfile="ANKI", defaultextension="csv", title = csv_msg, parent=self.master)
         import csv
 
         thewriter = csv.writer(open(self.csvfile, 'w'))
@@ -606,7 +608,8 @@ class mainwindow:
         print(choice)
 
     def open_dir(self):
-        mainwindow.src_folder = filedialog.askdirectory()+"/"
+        open_msg = "Choose a directory of images and videoclips to open"
+        mainwindow.src_folder = filedialog.askdirectory(title = open_msg, message = open_msg)+"/"
 
         self.file_list = os.listdir(self.src_folder)
         self.input_files = [Filetype(file) for file in self.file_list]
@@ -641,6 +644,10 @@ class mainwindow:
         self.lookup()
 
     def test(self):
+        
+        print(f'list len: {len(self.input_files)}')
+        print(f'index: {self.img_index}')
+        """
         choice_list = ["掛[か]ける: 1. to hang (e.g. picture)/to hoist (e.g. sail)/to raise (e.g. flag) 2. to sit 3. to take (time, money)/to expend (money, time, etc.) 4. to make (a call) 5. to multiply 6. to secure (e.g. lock) 7. to put on (glasses, etc.) 8. to cover 9. to burden someone 10. to apply (insurance) 11. to turn on (an engine, etc.)/to set (a dial, an alarm clock, etc.) 12. to put an effect (spell, anaesthetic, etc.) on 13. to hold an emotion for (pity, hope, etc.) 14. to bind 15. to pour (or sprinkle, spray, etc.) onto 16. to argue (in court)/to deliberate (in a meeting)/to present (e.g. idea to a conference, etc.) 17. to increase further 18. to catch (in a trap, etc.) 19. to set atop 20. to erect (a makeshift building) 21. to hold (a play, festival, etc.) 22. to wager/to bet/to risk/to stake/to gamble 23. to be partway doing .../to begin (but not complete) .../to be about to ... 24. indicates (verb) is being directed to (someone)",
                         "駆[か]ける: 1. to run (race, esp. horse)/to dash 2. to gallop (one's horse)/to canter 3. to advance (against one's enemy)",
                         "欠[か]ける: 1. to be chipped/to be damaged/to be broken 2. to be lacking/to be missing 3. to be insufficient/to be short/to be deficient/to be negligent toward 4. (of the moon) to wane/to go into eclipse",
@@ -656,6 +663,7 @@ class mainwindow:
         for i in range(len(choice_list)):
             choice = choice_list[i]
             listbox.insert('end', choice)
+        """
 
 class Filetype:
     def __init__(self, file):

@@ -45,7 +45,7 @@ WIP
 - [x] ~~Add requirements.txt (urgent)~~ **Done**
 - [ ] Installation section
 - [ ] When a word has multiple definitions, give the user a graphical prompt to choose the correct one
-- [ ] Allow user to configure the directory of the clips to be processed
+- [x] ~~Allow user to configure the directory of the clips to be processed, and the save directory~~ **Done**
 - [ ] Allow user to provide their own Google API key for OCRing text
 - [ ] Convert the application from TkInter to PyQt
 - [ ] Create a web based application
@@ -54,9 +54,12 @@ WIP
     - [ ] Divide images without blend_modes import (or remove divide function)
     - [ ] Remove all JamDict dependecy from JpVerb
 - [ ] Redesign UI to be more intuitive and less ugly
+    - [ ] A "start" screen, with an Open dialog
+    - [ ] A carousel of thumbnails of all the cards that have been loaded
+    - [ ] Progress bars for cards being loaded in (especially movie clips)
 - [ ] Allow user to choose Hiragana or Katakana only for Furigana
 - [ ] Allow APKG ecxport
-- [ ] Upload Melon Anki Template repo
+- [ ] Create a repo for the Melon Anki template
 
 ## License
 [AGPL 3.0](https://choosealicense.com/licenses/agpl-3.0/)
