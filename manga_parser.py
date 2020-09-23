@@ -45,6 +45,9 @@ class mainwindow:
 
     def __init__(self, master):
 
+        style = ttk.Style(master)
+        style.theme_use('aqua')
+        print(style.theme_names())
         self.master = master
 
         # --- define images ----
@@ -141,7 +144,7 @@ class mainwindow:
         self.save_button.grid(row=0, column= 3)
         self.open_dir_button.grid(row=0, column=4)
         #TEST BUTTON
-        #self.test_button.grid(row=1, column= 0)
+        self.test_button.grid(row=1, column= 0)
 
         self.output_frame.grid(row=0,column=0, sticky='N')
         self.OCR_box.grid(row=0,column=0, columnspan=2, sticky='N')
@@ -644,27 +647,82 @@ class mainwindow:
         self.lookup()
 
     def test(self):
-        
-        print(f'list len: {len(self.input_files)}')
-        print(f'index: {self.img_index}')
-        """
-        choice_list = ["掛[か]ける: 1. to hang (e.g. picture)/to hoist (e.g. sail)/to raise (e.g. flag) 2. to sit 3. to take (time, money)/to expend (money, time, etc.) 4. to make (a call) 5. to multiply 6. to secure (e.g. lock) 7. to put on (glasses, etc.) 8. to cover 9. to burden someone 10. to apply (insurance) 11. to turn on (an engine, etc.)/to set (a dial, an alarm clock, etc.) 12. to put an effect (spell, anaesthetic, etc.) on 13. to hold an emotion for (pity, hope, etc.) 14. to bind 15. to pour (or sprinkle, spray, etc.) onto 16. to argue (in court)/to deliberate (in a meeting)/to present (e.g. idea to a conference, etc.) 17. to increase further 18. to catch (in a trap, etc.) 19. to set atop 20. to erect (a makeshift building) 21. to hold (a play, festival, etc.) 22. to wager/to bet/to risk/to stake/to gamble 23. to be partway doing .../to begin (but not complete) .../to be about to ... 24. indicates (verb) is being directed to (someone)",
-                        "駆[か]ける: 1. to run (race, esp. horse)/to dash 2. to gallop (one's horse)/to canter 3. to advance (against one's enemy)",
-                        "欠[か]ける: 1. to be chipped/to be damaged/to be broken 2. to be lacking/to be missing 3. to be insufficient/to be short/to be deficient/to be negligent toward 4. (of the moon) to wane/to go into eclipse",
-                        "賭[か]ける: to wager/to bet/to risk/to stake/to gamble",
-                        "翔[かけ]る: 1. to soar/to fly 2. to run/to dash",
-                        "架[か]ける: to suspend between two points/to build (a bridge, etc.)/to put up on something (e.g. legs up on table)"]
-        
-        #buttons = []
 
-        listbox = tk.Listbox(self.options_frame, selectmode='single')
+        choicebox = tk.Toplevel(self.master)
+        
+        headertext = ttk.Label(choicebox, text="There's a few things this word could be:", font="Hiragino\ Maru\ Gothic\ ProN 15", background='#11469c')
+        headertext.grid(column=0,row=0)
+
+        myframe=tk.Frame(choicebox)
+        myframe.grid(column=0,row=1)
+
+        canvas=tk.Canvas(myframe, width = 750, height=500)
+        multichoice=tk.Frame(canvas)
+        myscrollbar=ttk.Scrollbar(myframe,orient="vertical",command=canvas.yview)
+
+        canvas.configure(scrollregion=canvas.bbox("all"), yscrollcommand=myscrollbar.set)
+
+        myscrollbar.grid(column=1, row=0, sticky= "NS")
+        canvas.grid(column=0, row=0)
+        canvas.create_window((0,0),window=multichoice,anchor='nw')
+        multichoice.bind("<Configure>", lambda i : canvas.configure(scrollregion=canvas.bbox("all")) )
+
+        COMMIT_button = ttk.Button(choicebox, text="COMMIT")
+        COMMIT_button.grid(column=0, row=2)
+
+        user_choice = tk.StringVar()
+        """
+        home = ttk.Radiobutton(multichoice, text='Home', variable=phone, value='home')
+        office = ttk.Radiobutton(multichoice, text='Office', variable=phone, value='office')
+        cell = ttk.Radiobutton(multichoice, text='Mobile', variable=phone, value='cell')
+
+        home.grid(row=0, column=0)
+        office.grid(row=1,column=0)
+        cell.grid(row=2,column=-0)
+        """
+
+        choice_list = [["掛[か]ける: ",["1. to hang (e.g. picture)/to hoist (e.g. sail)/to raise (e.g. flag)","2. to sit","3. to take (time, money)/to expend (money, time, etc.)","4. to make (a call)","5. to multiply","6. to secure (e.g. lock)","7. to put on (glasses, etc.)","8. to cover","9. to burden someone","10. to apply (insurance)","11. to turn on (an engine, etc.)/to set (a dial, an alarm clock, etc.)","12. to put an effect (spell, anaesthetic, etc.) on","13. to hold an emotion for (pity, hope, etc.)","14. to bind","15. to pour (or sprinkle, spray, etc.) onto","16. to argue (in court)/to deliberate (in a meeting)/to present (e.g. idea to a conference, etc.)","17. to increase further","18. to catch (in a trap, etc.)","19. to set atop","20. to erect (a makeshift building)","21. to hold (a play, festival, etc.)","22. to wager/to bet/to risk/to stake/to gamble","23. to be partway doing .../to begin (but not complete) .../to be about to ...","24. indicates (verb) is being directed to (someone)"]],
+                        ["駆[か]ける: ",["1. to run (race, esp. horse)/to dash","2. to gallop (one's horse)/to canter","3. to advance (against one's enemy)"]],
+                        ["欠[か]ける: ",["1. to be chipped/to be damaged/to be broken","2. to be lacking/to be missing","3. to be insufficient/to be short/to be deficient/to be negligent toward","4. (of the moon) to wane/to go into eclipse"]],
+                        ["賭[か]ける: ",["to wager/to bet/to risk/to stake/to gamble"]],
+                        ["翔[かけ]る: ",["1. to soar/to fly","2. to run/to dash"]],
+                        ["架[か]ける: ",["to suspend between two points/to build (a bridge, etc.)/to put up on something (e.g. legs up on table)"]]]
+        
+        for i in range(len(choice_list)):
+
+            word = choice_list[i][0]
+            definitions = choice_list[i][1]
+
+            core_frame = tk.Frame(multichoice)
+            core_frame.grid(row=i, column=0, sticky="W")
+
+            choice_frame = tk.Frame(core_frame)
+            choice_frame.grid(row=0,column=0, sticky="N")
+
+            radio = ttk.Radiobutton(choice_frame, text = i, variable=user_choice, value=word)
+            radio.grid(row=0,column=0, sticky="W")
+
+            def_title = ttk.Label(choice_frame, text=word, font="Hiragino\ Maru\ Gothic\ ProN 30")
+            def_title.grid(row=0,column=1, sticky="N")
+
+            definitions_frame = tk.Frame(core_frame)
+            definitions_frame.grid(row=0,column=1, sticky="W")
+            
+            for j in range(len(definitions)):
+                gloss = ttk.Label(definitions_frame, text=definitions[j], wraplength=500)
+                gloss.grid(row=j, column=0, sticky="W")
+
+            s = ttk.Separator(core_frame, orient='horizontal')
+            s.grid(row=1, column=0, columnspan=2, sticky="NSEW", pady=10)
+            
+        """
+        listbox = tk.Listbox(multichoice, selectmode='single')
         listbox.grid(row=1, columnspan=2)
 
         for i in range(len(choice_list)):
             choice = choice_list[i]
             listbox.insert('end', choice)
         """
-
 class Filetype:
     def __init__(self, file):
 
