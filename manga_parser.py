@@ -7,6 +7,7 @@
 
 import tkinter as tk
 from tkinter import ttk
+from ttkthemes import ThemedStyle
 
 from tkinter import filedialog
 
@@ -45,10 +46,13 @@ class mainwindow:
 
     def __init__(self, master):
 
-        style = ttk.Style(master)
-        style.theme_use('aqua')
-        print(style.theme_names())
         self.master = master
+
+        style = ThemedStyle(master)
+        style.theme_use('equilux')
+
+        self.master.configure(background='#464646')
+
 
         # --- define images ----
 
@@ -62,7 +66,7 @@ class mainwindow:
         self.zoomed = False
 
         self.working_size = (600, 600)
-        self.outerbr_width = 15
+        self.outerbr_width = 10
 
         #self.anki_folder = '/Users/earth/Library/Application Support/Anki2/User 1/collection.media/'
         #anki_folder = '/Users/earth/Downloads/'
@@ -73,11 +77,10 @@ class mainwindow:
         # --- GUI elements and bindings ---
 
         #Frames
-        self.canvas_frame = tk.Frame(self.master, borderwidth= self.outerbr_width, relief = "sunken")
-        self.info_frame = tk.Frame(self.master, borderwidth= 5, relief = "sunken")
-        self.output_frame = tk.Frame(self.info_frame)
-        self.options_frame = tk.Frame(self.info_frame, borderwidth=2)
-        self.player_frame = tk.Frame(self.info_frame, borderwidth= 1, relief = "sunken")
+        self.canvas_frame = ttk.Frame(self.master, borderwidth= self.outerbr_width, relief = "sunken")
+        self.info_frame = ttk.Frame(self.master, borderwidth= 20, relief = "flat")
+        self.output_frame = ttk.Frame(self.info_frame)
+        self.player_frame = ttk.Frame(self.info_frame, borderwidth= 2, relief='flat')
         #Set edges of canvas frame to be interactive
         self.canvas_frame.bind('<Button-1>', self.outer_click)
         self.canvas_frame.bind('<B1-Motion>', self.ref_line)
@@ -110,26 +113,29 @@ class mainwindow:
         self.pause_button = ttk.Button(self.player_frame, text="❚❚", width=2, command = self.pause_audio)
         self.reload_button = ttk.Button(self.player_frame, text="⟳", width=2, command= self.replay_audio)
         self.chop_button = ttk.Button(self.player_frame, text="✂", width=2, command= self.chop_audio)
-        self.prog_bar = ttk.Scale(self.player_frame, orient='horizontal', length=340, from_=1.0, to= 1.0, command=self.scrub)
+        self.prog_bar = ttk.Scale(self.player_frame, orient='horizontal', length=365, from_=1.0, to= 1.0, command=self.scrub)
         #Wave canvas
-        self.wave_size = (320,100)
+        self.wave_size = (343,100)
         self.wave_canvas = tk.Canvas(self.player_frame, width = self.wave_size[0], height = self.wave_size[1])
 
         #OCR_output
-        self.OCR_box = tk.Text(self.output_frame, width = 47, height = 5, borderwidth=2, relief="sunken", wrap='word')
+        self.OCR_box = tk.Text(self.output_frame, width = 28, height = 8, borderwidth=0, relief="sunken", wrap='word', padx = 10, pady=2 , foreground="#A8E6CE", font="Hiragino\ Maru\ Gothic\ ProN 18", spacing2 = 8)
+        self.OCR_scroll = ttk.Scrollbar(self.output_frame, orient='vertical', command= self.OCR_box.yview)
+        self.OCR_box.configure(yscrollcommand= self.OCR_scroll.set)
+
+        # Seperators
+        sep = ttk.Separator(self.output_frame, orient='horizontal')
+        sep1 = ttk.Separator(self.output_frame, orient='horizontal')
 
         #Info box
-        self.info_box = tk.Text(self.output_frame, width = 45, height=5, borderwidth=2, relief="sunken", wrap='word')
+        self.info_box = tk.Text(self.output_frame, width = 28, height = 8, borderwidth=0, relief="sunken", wrap='word', padx = 10, pady=2 , foreground="#FF8C94", font="Hiragino\ Maru\ Gothic\ ProN 18", spacing2 = 8)
         self.info_scroll = ttk.Scrollbar(self.output_frame, orient='vertical', command= self.info_box.yview)
         self.info_box.configure(yscrollcommand= self.info_scroll.set)
-
-        self.options_text = ttk.Label(self.options_frame, text="For this word,「学校」, there's a few things it could be:", wraplength = 350, justify='center')
-
 
         # -- Gridding --
 
         self.canvas_frame.grid(row=1, column=0, columnspan= 5)
-        self.info_frame.grid(row=0, rowspan=3, column=5, sticky='N,S,E,W')
+        self.info_frame.grid(row=0, rowspan=3, column=5, sticky='NSEW')
 
         self.canvas.grid()
         self.zoom_button.grid(row = 2, column= 0)
@@ -147,24 +153,28 @@ class mainwindow:
         self.test_button.grid(row=1, column= 0)
 
         self.output_frame.grid(row=0,column=0, sticky='N')
-        self.OCR_box.grid(row=0,column=0, columnspan=2, sticky='N')
-        self.info_box.grid(row=1, column=0, sticky='N,S')
-        self.info_scroll.grid(row=1, column=1, sticky='N,S')
+        self.OCR_box.grid(row=0, column=0, sticky='N')
+        self.OCR_scroll.grid(row=0, column=1, sticky='NS')
 
-        self.options_frame.grid(row=2, columnspan=2, sticky='S')
+        sep.grid(row=1,column=0,columnspan=2, pady= 5, sticky='EW')
 
-        self.player_frame.grid(row = 3, columnspan = 2, sticky='S,E')
-        self.info_frame.rowconfigure(0, weight = 1)
+        self.info_box.grid(row=2, column=0, sticky='NS')
+        self.info_scroll.grid(row=2, column=1, sticky='NS')
 
-        self.play_button.grid(row=0, column=1)
-        self.pause_button.grid(row=0, column=2)
-        self.reload_button.grid(row=0, column=3)
-        self.chop_button.grid(row=0, column=4)
-        self.prog_bar.grid(row=1, columnspan=5)
-        self.wave_canvas.grid(row=3, columnspan=5)
+        sep1.grid(row=3,column=0,columnspan=2, pady= 5, sticky='EW')
+
+        self.player_frame.grid(row = 4, columnspan = 2, sticky='SW')
+        self.play_button.grid(row=0, column=0)
+        self.pause_button.grid(row=0, column=1)
+        self.reload_button.grid(row=0, column=2)
+        self.chop_button.grid(row=0, column=3)
+        self.prog_bar.grid(row=1, columnspan=4, sticky='W')
+        self.wave_canvas.grid(row=2, columnspan=4, sticky='S')
 
         #self.options_text.grid(row=0, columnspan=2, sticky='N')
-
+        tk_gets = (self.canvas, self.wave_canvas, self.OCR_box, self.info_box)
+        for i in tk_gets:
+            i.config(bg='#464646', highlightthickness=0)
 
     # --- Regular functions ---
 
@@ -475,21 +485,35 @@ class mainwindow:
         self.currentfile.keywords = filename_keywords
         expression = ("・").join(filename_keywords)
 
+        def meanings(keyword):
+            lookup = jp.jplookup(keyword)
+
+            if lookup[0]: 
+                if len(lookup[0].senses) > 1:
+                    self.multichoice(lookup[0])
+                else:
+                    glosses = lookup[0].senses[0]
+                    if len(glosses) > 1:
+                        return "\n".join([f'{num+1}. {glosses[num]}' for num in range(len(glosses))])
+                    else:
+                        return glosses[0]
+
         if filename_keywords:
-            self.currentfile.meanings = [jp.jplookup(keyword) for keyword in filename_keywords]
+            self.currentfile.meanings = [meanings(keyword) for keyword in filename_keywords]
+
+            
 
         elif OCR_text_box != '':
             OCR_keywords = squiggle_word.findall(OCR_text_box)
-            self.currentfile.meanings = [jp.jplookup(keyword) for keyword in OCR_keywords]
+            self.currentfile.meanings = [meanings(keyword) for keyword in OCR_keywords]
             self.currentfile.keywords = OCR_keywords
             expression = OCR_text_box
-
 
         else:
             self.currentfile.meanings = ["No lookup word found in file: " + self.currentfile.filename]
             
-        foo = [self.currentfile.keywords[i]+"\n--------\n"+self.currentfile.meanings[i][0]+'\n\n' for i in range(len(self.currentfile.keywords))]
-        self.info_box.insert('1.0', "".join(foo))
+        meaning_readout = [self.currentfile.keywords[i]+"\n--------\n"+self.currentfile.meanings[i]+'\n\n' for i in range(len(self.currentfile.keywords))]
+        self.info_box.insert('1.0', "".join(meaning_readout))
         self.currentfile.expression = expression.replace('\n','<br />').replace('{','<span class="keyword" style="color:#cb4b16">').replace("}","</span>")
         self.currentfile.reading = jp.generate_furigana(self.currentfile.expression)
 
@@ -565,7 +589,7 @@ class mainwindow:
 
         if self.audio_time < self.end_time:
             self.bar_update = self.master.after(100, self.audio_bar)
-            self.wave_canvas.create_line(self.audio_time*self.wave_ratio,0,self.audio_time*self.wave_ratio,self.wave_size[1], width=1, fill='orange', tags='playline')
+            self.wave_canvas.create_line(self.audio_time*self.wave_ratio,0,self.audio_time*self.wave_ratio,self.wave_size[1], width=1, fill='#F8B195', tags='playline')
 
     def scrub(self, position):
         self.wave_canvas.delete('playline')
@@ -649,26 +673,39 @@ class mainwindow:
     def test(self):
 
         choicebox = tk.Toplevel(self.master)
-        
-        headertext = ttk.Label(choicebox, text="There's a few things this word could be:", font="Hiragino\ Maru\ Gothic\ ProN 15", background='#11469c')
-        headertext.grid(column=0,row=0)
 
-        myframe=tk.Frame(choicebox)
-        myframe.grid(column=0,row=1)
+        style = ThemedStyle(choicebox)
+        choicebox.configure(background='#464646')
+
+        headerframe=ttk.Frame(choicebox)
+        headerframe.grid(column=0, row=0)
+
+        headertext = tk.Label(headerframe, text="There's a few things this word", font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='#1CA7EC')
+        keywordtext = tk.Label(headerframe, text='「掛ける」', font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='white')
+        headertext2 = tk.Label(headerframe, text= "could be:", font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='#1CA7EC')
+        headertext.grid(column=0,row=0, pady=20)
+        keywordtext.grid(column=1,row=0,pady=20)
+        headertext2.grid(column=2,row=0,pady=20)
+
+        sep = ttk.Separator(choicebox, orient='horizontal')
+        sep.grid(row=1, column=0, sticky="NSEW", pady=10)
+
+        myframe=ttk.Frame(choicebox)
+        myframe.grid(column=0,row=2)
 
         canvas=tk.Canvas(myframe, width = 750, height=500)
-        multichoice=tk.Frame(canvas)
+        multichoice=ttk.Frame(canvas)
         myscrollbar=ttk.Scrollbar(myframe,orient="vertical",command=canvas.yview)
 
-        canvas.configure(scrollregion=canvas.bbox("all"), yscrollcommand=myscrollbar.set)
+        canvas.configure(scrollregion=canvas.bbox("all"), yscrollcommand=myscrollbar.set, background='#464646', highlightthickness=0)
 
         myscrollbar.grid(column=1, row=0, sticky= "NS")
         canvas.grid(column=0, row=0)
         canvas.create_window((0,0),window=multichoice,anchor='nw')
         multichoice.bind("<Configure>", lambda i : canvas.configure(scrollregion=canvas.bbox("all")) )
 
-        COMMIT_button = ttk.Button(choicebox, text="COMMIT")
-        COMMIT_button.grid(column=0, row=2)
+        COMMIT_button = ttk.Button(choicebox, text="COMMIT", command=self.testboy)
+        COMMIT_button.grid(column=0, row=3)
 
         user_choice = tk.StringVar()
         """
@@ -681,9 +718,16 @@ class mainwindow:
         cell.grid(row=2,column=-0)
         """
 
-        choice_list = [["掛[か]ける: ",["1. to hang (e.g. picture)/to hoist (e.g. sail)/to raise (e.g. flag)","2. to sit","3. to take (time, money)/to expend (money, time, etc.)","4. to make (a call)","5. to multiply","6. to secure (e.g. lock)","7. to put on (glasses, etc.)","8. to cover","9. to burden someone","10. to apply (insurance)","11. to turn on (an engine, etc.)/to set (a dial, an alarm clock, etc.)","12. to put an effect (spell, anaesthetic, etc.) on","13. to hold an emotion for (pity, hope, etc.)","14. to bind","15. to pour (or sprinkle, spray, etc.) onto","16. to argue (in court)/to deliberate (in a meeting)/to present (e.g. idea to a conference, etc.)","17. to increase further","18. to catch (in a trap, etc.)","19. to set atop","20. to erect (a makeshift building)","21. to hold (a play, festival, etc.)","22. to wager/to bet/to risk/to stake/to gamble","23. to be partway doing .../to begin (but not complete) .../to be about to ...","24. indicates (verb) is being directed to (someone)"]],
+        choice_list = [["掛[か]ける: ",["1. to hang (e.g. picture)/to hoist (e.g. sail)/to raise (e.g. flag)","2. to sit","3. to take (time, money)/to expend (money, time, etc.)",
+                        "4. to make (a call)","5. to multiply","6. to secure (e.g. lock)","7. to put on (glasses, etc.)","8. to cover","9. to burden someone","10. to apply (insurance)",
+                        "11. to turn on (an engine, etc.)/to set (a dial, an alarm clock, etc.)","12. to put an effect (spell, anaesthetic, etc.) on","13. to hold an emotion for (pity, hope, etc.)",
+                        "14. to bind","15. to pour (or sprinkle, spray, etc.) onto","16. to argue (in court)/to deliberate (in a meeting)/to present (e.g. idea to a conference, etc.)",
+                        "17. to increase further","18. to catch (in a trap, etc.)","19. to set atop","20. to erect (a makeshift building)","21. to hold (a play, festival, etc.)",
+                        "22. to wager/to bet/to risk/to stake/to gamble","23. to be partway doing .../to begin (but not complete) .../to be about to ...",
+                        "24. indicates (verb) is being directed to (someone)"]],
                         ["駆[か]ける: ",["1. to run (race, esp. horse)/to dash","2. to gallop (one's horse)/to canter","3. to advance (against one's enemy)"]],
-                        ["欠[か]ける: ",["1. to be chipped/to be damaged/to be broken","2. to be lacking/to be missing","3. to be insufficient/to be short/to be deficient/to be negligent toward","4. (of the moon) to wane/to go into eclipse"]],
+                        ["欠[か]ける: ",["1. to be chipped/to be damaged/to be broken","2. to be lacking/to be missing","3. to be insufficient/to be short/to be deficient/to be negligent toward",
+                        "4. (of the moon) to wane/to go into eclipse"]],
                         ["賭[か]ける: ",["to wager/to bet/to risk/to stake/to gamble"]],
                         ["翔[かけ]る: ",["1. to soar/to fly","2. to run/to dash"]],
                         ["架[か]ける: ",["to suspend between two points/to build (a bridge, etc.)/to put up on something (e.g. legs up on table)"]]]
@@ -693,28 +737,31 @@ class mainwindow:
             word = choice_list[i][0]
             definitions = choice_list[i][1]
 
-            core_frame = tk.Frame(multichoice)
-            core_frame.grid(row=i, column=0, sticky="W")
+            core_frame = ttk.Frame(multichoice)
+            core_frame.grid(row=i, column=0, sticky="NW")
 
-            choice_frame = tk.Frame(core_frame)
-            choice_frame.grid(row=0,column=0, sticky="N")
+            choice_frame = ttk.Frame(core_frame)
+            choice_frame.grid(row=0,column=0, sticky="NW")
 
-            radio = ttk.Radiobutton(choice_frame, text = i, variable=user_choice, value=word)
-            radio.grid(row=0,column=0, sticky="W")
+            radio = tk.Radiobutton(choice_frame, text = i+1, variable=user_choice, value=word, bg='#464646', fg='white', font="Hiragino\ Maru\ Gothic\ ProN 25", padx=10)
+            radio.grid(row=0,column=0, sticky="NW")
 
-            def_title = ttk.Label(choice_frame, text=word, font="Hiragino\ Maru\ Gothic\ ProN 30")
-            def_title.grid(row=0,column=1, sticky="N")
+            def_title = tk.Label(choice_frame, text=word, font="Hiragino\ Maru\ Gothic\ ProN 25", bg='#464646', fg='white')
+            def_title.grid(row=0,column=1, sticky="NW")
 
-            definitions_frame = tk.Frame(core_frame)
-            definitions_frame.grid(row=0,column=1, sticky="W")
+            definitions_frame = ttk.Frame(core_frame)
+            definitions_frame.grid(row=0,column=1, sticky="NW", pady=8)
             
             for j in range(len(definitions)):
-                gloss = ttk.Label(definitions_frame, text=definitions[j], wraplength=500)
-                gloss.grid(row=j, column=0, sticky="W")
+                gloss = ttk.Label(definitions_frame, text=definitions[j], wraplength=500, font="Helvetica\ Neue\ Light 15", width=750)
+                gloss.grid(row=j, column=0, sticky="NW", pady=5)
 
             s = ttk.Separator(core_frame, orient='horizontal')
             s.grid(row=1, column=0, columnspan=2, sticky="NSEW", pady=10)
             
+            #tk_gets = (self.canvas, self.wave_canvas, self.OCR_box, self.info_box)
+            #for i in tk_gets:
+            #    i.config(bg='#464646', highlightthickness=0)
         """
         listbox = tk.Listbox(multichoice, selectmode='single')
         listbox.grid(row=1, columnspan=2)
@@ -723,6 +770,10 @@ class mainwindow:
             choice = choice_list[i]
             listbox.insert('end', choice)
         """
+
+    def testboy(self):
+        print('test')
+
 class Filetype:
     def __init__(self, file):
 
@@ -790,7 +841,7 @@ class Filetype:
             signal = numpy.frombuffer(signal, "<i2")
 
             fig = plt.figure(figsize=(25,10))
-            plt.plot(signal,color='#ff33af')
+            plt.plot(signal,color='#F67280')
             plt.gca().set_axis_off()
             plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
             plt.margins(0,0)

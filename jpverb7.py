@@ -1,5 +1,5 @@
 ########################################################################
-#JPwordsearch Version 1.8, Momodath 11/08/2020
+#JPwordsearch Version 0.9, Momodath 28/09/2020
 ########################################################################
 
 import re
@@ -12,9 +12,11 @@ tokenizer_obj = dictionary.Dictionary().create()
 
 from xml.etree import ElementTree as ET
 
-xml_path = '/Users/earth/Documents/Programming/My own Japanese programs/Lets make cards/kanjidic2.xml'
+kanji_xml_path = '/Users/earth/Documents/Programming/My own Japanese programs/Lets make cards/kanjidic2.xml'
+jpdict_xml_path = '/Users/earth/Documents/Programming/My own Japanese programs/Lets make cards/JMdict_e.xml'
 
-tree = ET.parse(xml_path)
+kanjitree = ET.parse(kanji_xml_path)
+JPtree = ET.parse(jpdict_xml_path).findall('entry')
 
 jmd = Jamdict()
 
@@ -104,7 +106,7 @@ def generate_furigana(sentence):
 		try:
 			for char in word:
 				if kanji_check(char):
-					entry = tree.find(f"character/[literal='{char}']")
+					entry = kanjitree.find(f"character/[literal='{char}']")
 					on = entry.findall("reading_meaning/rmgroup/reading[@r_type='ja_on']")
 					kun = entry.findall("reading_meaning/rmgroup/reading[@r_type='ja_kun']")
 					readings = [reading.text.split(".")[0] for reading in on+kun]
@@ -157,112 +159,45 @@ def verbformat(wordinput, original_input = None, original_sentence = None):
 			break
 	return dictforms, original_input, original_sentence #this will be a list of the possible dict forms of the verb
 
+
+class lookup_key:
+	def __init__(self, searchword):
+		self.senses = []
+		
+		for entry in JPtree:
+			word_forms = entry.findall('k_ele/keb')
+			senses = entry.findall('sense')
+
+			try:
+				for word in word_forms:
+					if word.text == searchword:
+						for sense in senses:
+							gloss_list = sense.findall('gloss')
+							self.senses.append([gloss.text for gloss in gloss_list])
+
+						self.reading = entry.find('r_ele/reb').text
+			except:
+				pass
+
+
+
 #Searches a list of Japanese words, and returns a list of definitions (lists can be a single item)
 def jpwordsearch(searchlist, original_input = None, original_sentence = None):
 
 	if type(searchlist) is str: #converts the input to a list if it was a str
 		searchlist = [str(searchlist)]
-
 	if not original_input: #If no seperate value is given for "original_input", use the value for "lookuplist" (this helps preserve it for passing to our other functions)
 		original_input = searchlist[0]
 
+	keyword = lookup_key(searchlist[0])
 
-	#Creates empty lists, first is for "searched", which we will append when we search for something, to prevent searching the same thing twice
-	searched = []
-	definitionlist = []
-
-	for searchword in searchlist:
-		if searchword not in searched: #Now we check to see if the searchword has already been searched (if it is present in "searched"), to prevent duplicates
-			searched.append(searchword) #And if not, we add the word we're searching for to the "searched" list
-			
-			result = jmd.lookup(searchword) #Defines 'result' as the searchword looked up with Jamdict/JMdict
-		
-			if result.entries: #If Jamdict returned a result from the main dict (not kanji or names),
-
-				for entry in result.entries: #Add each meaning from the list of meanings that Jamdict returned to the list "meanings", returned later
-					
-					separator=''
-					tmp = [] #resets tmp to empty list
-
-					if entry.kanji_forms: #Checks if there is a kanji, so it can put the reading in sq brackets if so
-						tmp.append(furigana_cleaner(entry.kanji_forms[0].text, entry.kana_forms[0].text))
-					
-					if not entry.kanji_forms: #if not, it just prints the kana
-					    tmp.append(entry.kana_forms[0].text)
-					
-					if entry.senses:
-					    tmp.append(':')
-					    if len(entry.senses) == 1: #If there's only one meaning, we just print it
-					        tmp.append(" "+entry.senses[0].text())
-					    else: #Otherwise we add sequential numbers
-					        for sense, idx in zip(entry.senses, range(len(entry.senses))):
-					            tmp.append(' {i}. {s}'.format(i=idx + 1, s=sense.text()))
-
-					definitionlist.append(separator.join(tmp))
-						#kanji.append(i.kanji_forms) #If JmDict returned a result, append the kanji to "kanji" and kana to "kana"
-						#kana.append(i.kana_forms)
-						#meanings.append(i.senses) #This will be a list
-			
-
-	###The "meaning chooser" portion of the function
-
-	if definitionlist:
-		choiceerror = Fore.RED + "Sorry, I don't think that was an option, please try again." + Fore.RESET
-		divider = "- - - - - - - - - - - - - - - - - - - - - - - -\n"
-
-		for lookup in definitionlist:
-		
-			if len(definitionlist) == 1:
-				return lookup, original_input, original_sentence
-
-			elif len(definitionlist) > 1:
-
-				if original_sentence:
-					print(Fore.WHITE + "Okay, in the sentence 「" + colourise_sentence(original_sentence.strip().replace("<br>", "  ") + "」"))
-				print(Fore.WHITE + "There's a few things this word 「" + Fore.RESET + Back.RED + original_input + Back.RESET + Fore.WHITE + "」 could be:" + Fore.RESET)
-				for optnum, i in enumerate(definitionlist):
-					print(Fore.RED + divider
-						+Back.RED +Fore.RESET+ "OPTION " + str(optnum+1) +":"+Back.RESET+"\n"
-						+Fore.GREEN + definitionlist[optnum] + Fore.RESET)
-				print(Fore.RED + divider + Fore.RESET)
-
-				Choosing = True
-
-				while Choosing == True:
-					meaningchoice = input("Please choose by entering an option number, or enter 'n' for none: ")
-					#meaningchoice = 'n'
-
-					try: #checks that what was entered was a number, and not outside the length of our list
-						meaningchoice = int(meaningchoice)
-
-						if meaningchoice > len(definitionlist) or meaningchoice <1:
-							print(choiceerror)
-
-						else:
-							chosen_option = definitionlist[meaningchoice-1]
-							print("\nYou chose " + Back.RED + "OPTION {OPT}".format(OPT=meaningchoice) + Back.RESET)
-							confirmation = input("\nIs that correct? Enter if so, or enter X to choose again.")
-							if confirmation == "x" or confirmation == "X":
-								print(Fore.RED + "Choosing again" + Fore.RESET)
-
-							else:
-								print(Fore.RED + "Confirmed.\n" + Fore.RESET)
-								Choosing = False
-								return chosen_option, original_input, original_sentence
-
-					except:
-						if meaningchoice.lower().strip() == "n":
-							print(Fore.RED + "\nNot choosing any." + Fore.RESET)
-							return None, original_input, original_sentence
-
-						else:
-							print(choiceerror)
-	
-	return None, original_input, original_sentence
+	if keyword.senses:
+		return keyword, original_input, original_sentence
+	else:
+		return None, original_input, original_input
 
 #defines the order to try the above, 1st straight wordsearch, then if no results a verb conjegation search
 def jplookup(lookuplist, original_input=None, original_sentence = None):
-	print(f'Lookup: {lookuplist}')
 	if lookuplist == None:
 		return None
 
@@ -299,8 +234,6 @@ def jplookup(lookuplist, original_input=None, original_sentence = None):
 
 			lookuplist[0] = re.sub(r'''(.\u3099)''', convert_PA, lookuplist[0])
 
-	notfound_msg = "{Lookup}: !!! No result. please look up manually".format(Lookup=lookuplist[0]) #Defines our error message (needs to be after the above, in case it isn't a list)
-	
 	if not original_input: #If no seperate value is given for "original_input", use the value for "lookuplist" (this helps preserve it for passing to our other functions)
 		original_input = lookuplist[0]
 
@@ -311,7 +244,7 @@ def jplookup(lookuplist, original_input=None, original_sentence = None):
 		straight_result = jpwordsearch(lookuplist, original_input, original_sentence) #1st try doing a straight word search
 
 		if straight_result[0]: #If that gave a result,
-			return straight_result[0], original_input, original_sentence
+			return straight_result
 
 		else: #If a straight search didn't return anything,
 
@@ -324,36 +257,24 @@ def jplookup(lookuplist, original_input=None, original_sentence = None):
 			if word_list[0] != original_input:
 				word_list_lookups = [jpwordsearch(i, original_input, original_sentence)[0] for i in word_list if i]
 				word_list_lookups = [i for i in word_list_lookups if i]
-				return ("<br />").join(word_list_lookups), original_input, original_sentence
+				return word_list_lookups
 
-			else: #If that doesn't return anything
+			else: #If that doesn't return anything new
 				if lookuplist[0].endswith("と") or lookuplist[0].endswith("な"): #Check if it ends with "と" or "な"
 					Gitaigo_unmake = jpwordsearch(lookuplist[0][0:-1], original_input, original_sentence ) #if it does, strip the last character and try again
 
-					if Gitaigo_unmake[0]:
-						return Gitaigo_unmake[0], original_input, original_sentence
+					if Gitaigo_unmake[0].senses:
+						return Gitaigo_unmake
 
 				
 				else: #If it doesn't end with a と, try adding one and see if you get a result
 					Gitaigo_make = jpwordsearch([lookuplist[0]+"と"], original_input, original_sentence)
-					if Gitaigo_make[0]:
-						return Gitaigo_make[0], original_input, original_sentence
+					if Gitaigo_make[0].senses:
+						return Gitaigo_make
 
-				newsearch = input(f'No result found for {Fore.YELLOW}"{lookuplist[0]}"{Fore.RESET}\nin the sentence「{colourise_sentence(original_sentence.strip().replace("<br>", "  "))}」\nPlease enter another search form, or {Fore.YELLOW}\'n\'{Fore.RESET} for none')
-
-				if newsearch == 'n':
-					print(f'Writing: {notfound_msg}')
-					return notfound_msg, original_input, original_sentence
-
-				else:
-					print(f'Searching {Fore.YELLOW}{newsearch}{Fore.RESET}.\n-----')
-					return jplookup(newsearch, original_input, original_sentence)
-
-
-
-	else: #If a blank string is inputted
-		return None, original_input, original_sentence
+	return None, original_input, original_sentence
 
 if __name__ == '__main__':
-	test = jplookup('狙える')
-	print(test)
+	test1 = jplookup('食べる')
+	print(test1[0].senses)
+	#test2 = jplookup('狙える')
