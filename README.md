@@ -44,7 +44,7 @@ WIP
 ## Goals / to do
 - [x] ~~Add requirements.txt (urgent)~~ **Done**
 - [ ] Installation section
-- [ ] When a word has multiple definitions, give the user a graphical prompt to choose the correct one
+- [x] ~~When a word has multiple definitions, give the user a graphical prompt to choose the correct one~~ **Done**
 - [x] ~~Allow user to configure the directory of the clips to be processed, and the save directory~~ **Done**
 - [ ] Allow user to provide their own Google API key for OCRing text
 - [ ] Convert the application from TkInter to PyQt
@@ -52,8 +52,9 @@ WIP
 - [ ] Reduce the dependencies:
     - [ ] Simpler way to show waveform, without needing matplotlib
     - [ ] Divide images without blend_modes import (or remove divide function)
-    - [ ] Remove all JamDict dependecy from JpVerb
-- [ ] Redesign UI to be more intuitive and less ugly
+    - [ ] ~~Remove all JamDict dependecy from JpVerb~~ **Done**
+- [x] ~~Redesign UI to be more less ugly~~ **Done**
+-  Add User friendly touches:
     - [ ] A "start" screen, with an Open dialog
     - [ ] A carousel of thumbnails of all the cards that have been loaded
     - [ ] Progress bars for cards being loaded in (especially movie clips)

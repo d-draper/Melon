@@ -100,7 +100,7 @@ class mainwindow:
 
         self.zoom_button = ttk.Button(self.master, text="Zoom", command= self.toggle_zoom)
         self.OCR_button = ttk.Button(self.master, text="OCR", command = self.Google_OCR)
-        self.lookup_button = ttk.Button(self.master, text="Lookup", command = self.lookup)
+        self.lookup_button = ttk.Button(self.master, text="Lookup", command = self.keyword_finder)
         self.box_remove_button = ttk.Button(self.master, text="Remove box", command = lambda: self.box_removal(self.canvas.coords('refline')))
         self.export_button = ttk.Button(self.master, text="Export", command = self.export)
         self.open_dir_button = ttk.Button(self.master, text="OPEN", command = self.open_dir)
@@ -291,9 +291,6 @@ class mainwindow:
         print(self.canvas.coords('refline'))
 
     def box_removal(self, xy):
-        #global imagelist #preserves our RGBA conversion
-        #global image_replace #prevents garbage collection 
-        #global adj_w, adj_h, cropped_image, thumb_cropbox, zoomed
 
         if self.zoomed:
             cropbox = self.zoombox
@@ -474,56 +471,134 @@ class mainwindow:
         else:
             self.DisableButtons()
 
-    def lookupbox_fill(self):
-        meaning_readout = [self.currentfile.keywords[i]+"\n--------\n"+self.currentfile.meanings[i]+'\n\n' for i in range(len(self.currentfile.keywords))]
-        self.info_box.insert('1.0', "".join(meaning_readout))
-        self.currentfile.expression = self.expression.replace('\n','<br />').replace('{','<span class="keyword" style="color:#cb4b16">').replace("}","</span>")
+    def lookupbox_fill(self, definition):
+        meaning_readout = self.currentfile.keywords[self.parsedex]+"\n--------\n"+definition+'\n\n'
+        self.info_box.insert('end', meaning_readout)
+        self.currentfile.expression = definition.replace('\n','<br />').replace('{','<span class="keyword" style="color:#cb4b16">').replace("}","</span>")
         self.currentfile.reading = jp.generate_furigana(self.currentfile.expression)
-
         self.anki_txt[self.img_index] = f'''{self.currentfile.expression}\t{self.currentfile.reading}\t{("<br />").join([i[0] for i in self.currentfile.meanings])}\t'<img src="{self.currentfile.image}">\t'''
+        self.parsedex +=1
+        self.parse()
 
 
-    def meaning_format(self, keyword):
-        lookup = jp.jplookup(keyword)
-
-        if lookup[0]: 
-            if len(lookup[0].senses) > 1:
-                self.test(lookup[0])
-                popup=True
-            else:
-                glosses = lookup[0].senses[0]
-                if len(glosses) > 1:
-                    return "\n".join([f'{num+1}. {glosses[num]}' for num in range(len(glosses))])
-                else:
-                    return glosses[0]
-
-    def lookup(self):
-        
+    def keyword_finder(self):
         jptextfinder = re.compile(r'''[\u4E00-\u9FBF|\u3005-\u30FF]+''')
         filename_keywords = jptextfinder.findall(self.currentfile.filename)
-
-        squiggle_word = re.compile(r'''(?:{)(.+?)(?:})''')
         OCR_text_box = self.OCR_box.get('1.0','end').strip()
+        squiggle_word = re.compile(r'''(?:{)(.+?)(?:})''')
 
-        self.currentfile.keywords = filename_keywords
-        self.expression = ("・").join(filename_keywords)
-
-        popup = False
+        def pp():
+            self.defs = [jp.jplookup(key) for key in self.currentfile.keywords]
+            self.parsedex = 0
+            self.parse()
 
         if filename_keywords:
-            self.currentfile.meanings = [self.meaning_format(keyword) for keyword in filename_keywords]
+            self.currentfile.keywords = filename_keywords
+            self.expression = ("・").join(self.currentfile.keywords)
+            pp()
 
         elif OCR_text_box != '':
-            OCR_keywords = squiggle_word.findall(OCR_text_box)
-            self.currentfile.meanings = [self.meaning_format(keyword) for keyword in OCR_keywords]
-            self.currentfile.keywords = OCR_keywords
+            self.currentfile.keywords = squiggle_word.findall(OCR_text_box)
             self.expression = OCR_text_box
+            pp()
 
-        else:
-            self.currentfile.meanings = ["No lookup word found in file: " + self.currentfile.filename]
+    def parse(self):
+        lookup = self.defs[self.parsedex]
+        def pp():
+                self.lookupbox_fill(definition)
 
-        if not popup:
-            self.lookupbox_fill()
+        if self.parsedex < len(self.defs):
+            if lookup[0]: 
+                if len(lookup[0].senses) > 1:
+                    self.def_choose(lookup[0])
+                else:
+                    glosses = lookup[0].senses[0]
+                    if len(glosses) > 1:
+                        definition = "\n".join([f'{num+1}. {glosses[num]}' for num in range(len(glosses))])
+                        pp()
+                    else:
+                        definition = glosses[0]
+                        pp()
+
+            else:
+                definition = "PLEASE LOOKUP MANUALLY"
+                pp()
+
+
+    def def_choose(self, lookup):
+        word = self.currentfile.keywords[self.parsedex]
+        choicebox = tk.Toplevel(self.master)
+        style = ThemedStyle(choicebox)
+        choicebox.configure(background='#464646')
+
+        headerframe=ttk.Frame(choicebox)
+        headerframe.grid(column=0, row=0)
+
+        headertext = tk.Label(headerframe, text="There's a few things this word", font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='#1CA7EC')
+        keywordtext = tk.Label(headerframe, text=f'「{word}」', font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='white')
+        headertext2 = tk.Label(headerframe, text= "could be:", font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='#1CA7EC')
+        headertext.grid(column=0,row=0, pady=20)
+        keywordtext.grid(column=1,row=0,pady=20)
+        headertext2.grid(column=2,row=0,pady=20)
+
+        sep = ttk.Separator(choicebox, orient='horizontal')
+        sep.grid(row=1, column=0, sticky="NSEW", pady=10)
+
+        myframe=ttk.Frame(choicebox)
+        myframe.grid(column=0,row=2)
+
+        canvas=tk.Canvas(myframe, width = 750, height=500)
+        multichoice=ttk.Frame(canvas)
+        myscrollbar=ttk.Scrollbar(myframe,orient="vertical",command=canvas.yview)
+
+        canvas.configure(scrollregion=canvas.bbox("all"), yscrollcommand=myscrollbar.set, background='#464646', highlightthickness=0)
+
+        myscrollbar.grid(column=1, row=0, sticky= "NS")
+        canvas.grid(column=0, row=0)
+        canvas.create_window((0,0),window=multichoice,anchor='nw')
+        multichoice.bind("<Configure>", lambda i : canvas.configure(scrollregion=canvas.bbox("all")) )
+
+        class chosen_sense:
+            def __init__(self, glosses):
+                self.senses = [glosses]
+
+        def commit():
+            indexval = int(user_choice.get())
+            self.defs[self.parsedex] = [chosen_sense(choice_list[indexval])]
+            choicebox.destroy()
+            self.parse()
+
+        user_choice = tk.StringVar()
+
+        COMMIT_button = ttk.Button(choicebox, text="COMMIT", command=commit)
+        COMMIT_button.grid(column=0, row=3)
+
+        choice_list = lookup.senses
+
+        for i in range(len(choice_list)):
+
+            definitions = choice_list[i]
+            core_frame = ttk.Frame(multichoice)
+            core_frame.grid(row=i, column=0, sticky="NW")
+
+            choice_frame = ttk.Frame(core_frame)
+            choice_frame.grid(row=0,column=0, sticky="NW")
+
+            radio = tk.Radiobutton(choice_frame, text = i+1, variable=user_choice, value=i, bg='#464646', fg='white', font="Hiragino\ Maru\ Gothic\ ProN 25", padx=10)
+            radio.grid(row=0,column=0, sticky="NW")
+
+            def_title = tk.Label(choice_frame, text=word, font="Hiragino\ Maru\ Gothic\ ProN 25", bg='#464646', fg='white')
+            def_title.grid(row=0,column=1, sticky="NW")
+
+            definitions_frame = ttk.Frame(core_frame)
+            definitions_frame.grid(row=0,column=1, sticky="NW", pady=8)
+            
+            for j in range(len(definitions)):
+                gloss = ttk.Label(definitions_frame, text=definitions[j], wraplength=500, font="Helvetica\ Neue\ Light 15", width=750)
+                gloss.grid(row=j, column=0, sticky="NW", pady=5)
+
+            s = ttk.Separator(core_frame, orient='horizontal')
+            s.grid(row=1, column=0, columnspan=2, sticky="NSEW", pady=10)
 
     def save_image(self):
         self.OCR_text = self.OCR_box.get('1.0','end').strip()
@@ -674,123 +749,11 @@ class mainwindow:
 
 
         self.set_image()
-        self.lookup()
+        self.keyword_finder()
 
-    def test(self, lookup):
-
-        word = lookup.reading
-
-        choicebox = tk.Toplevel(self.master)
-        style = ThemedStyle(choicebox)
-        choicebox.configure(background='#464646')
-
-        headerframe=ttk.Frame(choicebox)
-        headerframe.grid(column=0, row=0)
-
-        headertext = tk.Label(headerframe, text="There's a few things this word", font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='#1CA7EC')
-        keywordtext = tk.Label(headerframe, text=f'「{word}」', font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='white')
-        headertext2 = tk.Label(headerframe, text= "could be:", font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='#1CA7EC')
-        headertext.grid(column=0,row=0, pady=20)
-        keywordtext.grid(column=1,row=0,pady=20)
-        headertext2.grid(column=2,row=0,pady=20)
-
-        sep = ttk.Separator(choicebox, orient='horizontal')
-        sep.grid(row=1, column=0, sticky="NSEW", pady=10)
-
-        myframe=ttk.Frame(choicebox)
-        myframe.grid(column=0,row=2)
-
-        canvas=tk.Canvas(myframe, width = 750, height=500)
-        multichoice=ttk.Frame(canvas)
-        myscrollbar=ttk.Scrollbar(myframe,orient="vertical",command=canvas.yview)
-
-        canvas.configure(scrollregion=canvas.bbox("all"), yscrollcommand=myscrollbar.set, background='#464646', highlightthickness=0)
-
-        myscrollbar.grid(column=1, row=0, sticky= "NS")
-        canvas.grid(column=0, row=0)
-        canvas.create_window((0,0),window=multichoice,anchor='nw')
-        multichoice.bind("<Configure>", lambda i : canvas.configure(scrollregion=canvas.bbox("all")) )
-
-        def commit():
-            indexval = int(user_choice.get())
-            glosses = choice_list[indexval]
-
-            if len(glosses) > 1:
-                self.currentfile.meanings = ["\n".join([f'{num+1}. {glosses[num]}' for num in range(len(glosses))])]
-            else:
-                self.currentfile.meanings = [glosses[0]]
-            self.lookupbox_fill()
-            choicebox.destroy()
-
-        user_choice = tk.StringVar()
-
-        COMMIT_button = ttk.Button(choicebox, text="COMMIT", command=commit)
-        COMMIT_button.grid(column=0, row=3)
-
-
-        choice_list = lookup.senses
-
-        """
-        home = ttk.Radiobutton(multichoice, text='Home', variable=phone, value='home')
-        office = ttk.Radiobutton(multichoice, text='Office', variable=phone, value='office')
-        cell = ttk.Radiobutton(multichoice, text='Mobile', variable=phone, value='cell')
-
-        home.grid(row=0, column=0)
-        office.grid(row=1,column=0)
-        cell.grid(row=2,column=-0)
-
-        choice_list = [["掛[か]ける: ",["1. to hang (e.g. picture)/to hoist (e.g. sail)/to raise (e.g. flag)","2. to sit","3. to take (time, money)/to expend (money, time, etc.)",
-                        "4. to make (a call)","5. to multiply","6. to secure (e.g. lock)","7. to put on (glasses, etc.)","8. to cover","9. to burden someone","10. to apply (insurance)",
-                        "11. to turn on (an engine, etc.)/to set (a dial, an alarm clock, etc.)","12. to put an effect (spell, anaesthetic, etc.) on","13. to hold an emotion for (pity, hope, etc.)",
-                        "14. to bind","15. to pour (or sprinkle, spray, etc.) onto","16. to argue (in court)/to deliberate (in a meeting)/to present (e.g. idea to a conference, etc.)",
-                        "17. to increase further","18. to catch (in a trap, etc.)","19. to set atop","20. to erect (a makeshift building)","21. to hold (a play, festival, etc.)",
-                        "22. to wager/to bet/to risk/to stake/to gamble","23. to be partway doing .../to begin (but not complete) .../to be about to ...",
-                        "24. indicates (verb) is being directed to (someone)"]],
-                        ["駆[か]ける: ",["1. to run (race, esp. horse)/to dash","2. to gallop (one's horse)/to canter","3. to advance (against one's enemy)"]],
-                        ["欠[か]ける: ",["1. to be chipped/to be damaged/to be broken","2. to be lacking/to be missing","3. to be insufficient/to be short/to be deficient/to be negligent toward",
-                        "4. (of the moon) to wane/to go into eclipse"]],
-                        ["賭[か]ける: ",["to wager/to bet/to risk/to stake/to gamble"]],
-                        ["翔[かけ]る: ",["1. to soar/to fly","2. to run/to dash"]],
-                        ["架[か]ける: ",["to suspend between two points/to build (a bridge, etc.)/to put up on something (e.g. legs up on table)"]]]
-        """
-
-        for i in range(len(choice_list)):
-
-            definitions = choice_list[i]
-
-            core_frame = ttk.Frame(multichoice)
-            core_frame.grid(row=i, column=0, sticky="NW")
-
-            choice_frame = ttk.Frame(core_frame)
-            choice_frame.grid(row=0,column=0, sticky="NW")
-
-            radio = tk.Radiobutton(choice_frame, text = i+1, variable=user_choice, value=i, bg='#464646', fg='white', font="Hiragino\ Maru\ Gothic\ ProN 25", padx=10)
-            radio.grid(row=0,column=0, sticky="NW")
-
-            def_title = tk.Label(choice_frame, text=word, font="Hiragino\ Maru\ Gothic\ ProN 25", bg='#464646', fg='white')
-            def_title.grid(row=0,column=1, sticky="NW")
-
-            definitions_frame = ttk.Frame(core_frame)
-            definitions_frame.grid(row=0,column=1, sticky="NW", pady=8)
+    def test(self):
+        pass
             
-            for j in range(len(definitions)):
-                gloss = ttk.Label(definitions_frame, text=definitions[j], wraplength=500, font="Helvetica\ Neue\ Light 15", width=750)
-                gloss.grid(row=j, column=0, sticky="NW", pady=5)
-
-            s = ttk.Separator(core_frame, orient='horizontal')
-            s.grid(row=1, column=0, columnspan=2, sticky="NSEW", pady=10)
-            
-            #tk_gets = (self.canvas, self.wave_canvas, self.OCR_box, self.info_box)
-            #for i in tk_gets:
-            #    i.config(bg='#464646', highlightthickness=0)
-        """
-        listbox = tk.Listbox(multichoice, selectmode='single')
-        listbox.grid(row=1, columnspan=2)
-
-        for i in range(len(choice_list)):
-            choice = choice_list[i]
-            listbox.insert('end', choice)
-        """
 
 class Filetype:
     def __init__(self, file):

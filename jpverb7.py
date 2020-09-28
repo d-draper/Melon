@@ -3,7 +3,6 @@
 ########################################################################
 
 import re
-from jamdict import Jamdict
 from colorama import init, Fore, Back, Style
 
 from sudachipy import tokenizer, dictionary
@@ -17,8 +16,6 @@ jpdict_xml_path = '/Users/earth/Documents/Programming/My own Japanese programs/L
 
 kanjitree = ET.parse(kanji_xml_path)
 JPtree = ET.parse(jpdict_xml_path).findall('entry')
-
-jmd = Jamdict()
 
 ########################################################################
 							#Endings
@@ -275,6 +272,6 @@ def jplookup(lookuplist, original_input=None, original_sentence = None):
 	return None, original_input, original_sentence
 
 if __name__ == '__main__':
-	test1 = jplookup('食べる')
+	test1 = jplookup('嚆矢')
 	print(test1[0].senses)
 	#test2 = jplookup('狙える')
