@@ -150,7 +150,7 @@ class mainwindow:
         self.save_button.grid(row=0, column= 3)
         self.open_dir_button.grid(row=0, column=4)
         #TEST BUTTON
-        self.test_button.grid(row=1, column= 0)
+        #self.test_button.grid(row=1, column= 0)
 
         self.output_frame.grid(row=0,column=0, sticky='N')
         self.OCR_box.grid(row=0, column=0, sticky='N')
@@ -473,7 +473,30 @@ class mainwindow:
 
         else:
             self.DisableButtons()
-        
+
+    def lookupbox_fill(self):
+        meaning_readout = [self.currentfile.keywords[i]+"\n--------\n"+self.currentfile.meanings[i]+'\n\n' for i in range(len(self.currentfile.keywords))]
+        self.info_box.insert('1.0', "".join(meaning_readout))
+        self.currentfile.expression = self.expression.replace('\n','<br />').replace('{','<span class="keyword" style="color:#cb4b16">').replace("}","</span>")
+        self.currentfile.reading = jp.generate_furigana(self.currentfile.expression)
+
+        self.anki_txt[self.img_index] = f'''{self.currentfile.expression}\t{self.currentfile.reading}\t{("<br />").join([i[0] for i in self.currentfile.meanings])}\t'<img src="{self.currentfile.image}">\t'''
+
+
+    def meaning_format(self, keyword):
+        lookup = jp.jplookup(keyword)
+
+        if lookup[0]: 
+            if len(lookup[0].senses) > 1:
+                self.test(lookup[0])
+                popup=True
+            else:
+                glosses = lookup[0].senses[0]
+                if len(glosses) > 1:
+                    return "\n".join([f'{num+1}. {glosses[num]}' for num in range(len(glosses))])
+                else:
+                    return glosses[0]
+
     def lookup(self):
         
         jptextfinder = re.compile(r'''[\u4E00-\u9FBF|\u3005-\u30FF]+''')
@@ -483,41 +506,24 @@ class mainwindow:
         OCR_text_box = self.OCR_box.get('1.0','end').strip()
 
         self.currentfile.keywords = filename_keywords
-        expression = ("・").join(filename_keywords)
+        self.expression = ("・").join(filename_keywords)
 
-        def meanings(keyword):
-            lookup = jp.jplookup(keyword)
-
-            if lookup[0]: 
-                if len(lookup[0].senses) > 1:
-                    self.multichoice(lookup[0])
-                else:
-                    glosses = lookup[0].senses[0]
-                    if len(glosses) > 1:
-                        return "\n".join([f'{num+1}. {glosses[num]}' for num in range(len(glosses))])
-                    else:
-                        return glosses[0]
+        popup = False
 
         if filename_keywords:
-            self.currentfile.meanings = [meanings(keyword) for keyword in filename_keywords]
-
-            
+            self.currentfile.meanings = [self.meaning_format(keyword) for keyword in filename_keywords]
 
         elif OCR_text_box != '':
             OCR_keywords = squiggle_word.findall(OCR_text_box)
-            self.currentfile.meanings = [meanings(keyword) for keyword in OCR_keywords]
+            self.currentfile.meanings = [self.meaning_format(keyword) for keyword in OCR_keywords]
             self.currentfile.keywords = OCR_keywords
-            expression = OCR_text_box
+            self.expression = OCR_text_box
 
         else:
             self.currentfile.meanings = ["No lookup word found in file: " + self.currentfile.filename]
-            
-        meaning_readout = [self.currentfile.keywords[i]+"\n--------\n"+self.currentfile.meanings[i]+'\n\n' for i in range(len(self.currentfile.keywords))]
-        self.info_box.insert('1.0', "".join(meaning_readout))
-        self.currentfile.expression = expression.replace('\n','<br />').replace('{','<span class="keyword" style="color:#cb4b16">').replace("}","</span>")
-        self.currentfile.reading = jp.generate_furigana(self.currentfile.expression)
 
-        self.anki_txt[self.img_index] = f'''{self.currentfile.expression}\t{self.currentfile.reading}\t{("<br />").join([i[0] for i in self.currentfile.meanings])}\t'<img src="{self.currentfile.image}">\t'''
+        if not popup:
+            self.lookupbox_fill()
 
     def save_image(self):
         self.OCR_text = self.OCR_box.get('1.0','end').strip()
@@ -670,10 +676,11 @@ class mainwindow:
         self.set_image()
         self.lookup()
 
-    def test(self):
+    def test(self, lookup):
+
+        word = lookup.reading
 
         choicebox = tk.Toplevel(self.master)
-
         style = ThemedStyle(choicebox)
         choicebox.configure(background='#464646')
 
@@ -681,7 +688,7 @@ class mainwindow:
         headerframe.grid(column=0, row=0)
 
         headertext = tk.Label(headerframe, text="There's a few things this word", font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='#1CA7EC')
-        keywordtext = tk.Label(headerframe, text='「掛ける」', font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='white')
+        keywordtext = tk.Label(headerframe, text=f'「{word}」', font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='white')
         headertext2 = tk.Label(headerframe, text= "could be:", font="Tsukushi\ A\ Round\ Gothic\ Regular 20", bg='#464646', fg='#1CA7EC')
         headertext.grid(column=0,row=0, pady=20)
         keywordtext.grid(column=1,row=0,pady=20)
@@ -704,10 +711,25 @@ class mainwindow:
         canvas.create_window((0,0),window=multichoice,anchor='nw')
         multichoice.bind("<Configure>", lambda i : canvas.configure(scrollregion=canvas.bbox("all")) )
 
-        COMMIT_button = ttk.Button(choicebox, text="COMMIT", command=self.testboy)
-        COMMIT_button.grid(column=0, row=3)
+        def commit():
+            indexval = int(user_choice.get())
+            glosses = choice_list[indexval]
+
+            if len(glosses) > 1:
+                self.currentfile.meanings = ["\n".join([f'{num+1}. {glosses[num]}' for num in range(len(glosses))])]
+            else:
+                self.currentfile.meanings = [glosses[0]]
+            self.lookupbox_fill()
+            choicebox.destroy()
 
         user_choice = tk.StringVar()
+
+        COMMIT_button = ttk.Button(choicebox, text="COMMIT", command=commit)
+        COMMIT_button.grid(column=0, row=3)
+
+
+        choice_list = lookup.senses
+
         """
         home = ttk.Radiobutton(multichoice, text='Home', variable=phone, value='home')
         office = ttk.Radiobutton(multichoice, text='Office', variable=phone, value='office')
@@ -716,7 +738,6 @@ class mainwindow:
         home.grid(row=0, column=0)
         office.grid(row=1,column=0)
         cell.grid(row=2,column=-0)
-        """
 
         choice_list = [["掛[か]ける: ",["1. to hang (e.g. picture)/to hoist (e.g. sail)/to raise (e.g. flag)","2. to sit","3. to take (time, money)/to expend (money, time, etc.)",
                         "4. to make (a call)","5. to multiply","6. to secure (e.g. lock)","7. to put on (glasses, etc.)","8. to cover","9. to burden someone","10. to apply (insurance)",
@@ -731,11 +752,11 @@ class mainwindow:
                         ["賭[か]ける: ",["to wager/to bet/to risk/to stake/to gamble"]],
                         ["翔[かけ]る: ",["1. to soar/to fly","2. to run/to dash"]],
                         ["架[か]ける: ",["to suspend between two points/to build (a bridge, etc.)/to put up on something (e.g. legs up on table)"]]]
-        
+        """
+
         for i in range(len(choice_list)):
 
-            word = choice_list[i][0]
-            definitions = choice_list[i][1]
+            definitions = choice_list[i]
 
             core_frame = ttk.Frame(multichoice)
             core_frame.grid(row=i, column=0, sticky="NW")
@@ -743,7 +764,7 @@ class mainwindow:
             choice_frame = ttk.Frame(core_frame)
             choice_frame.grid(row=0,column=0, sticky="NW")
 
-            radio = tk.Radiobutton(choice_frame, text = i+1, variable=user_choice, value=word, bg='#464646', fg='white', font="Hiragino\ Maru\ Gothic\ ProN 25", padx=10)
+            radio = tk.Radiobutton(choice_frame, text = i+1, variable=user_choice, value=i, bg='#464646', fg='white', font="Hiragino\ Maru\ Gothic\ ProN 25", padx=10)
             radio.grid(row=0,column=0, sticky="NW")
 
             def_title = tk.Label(choice_frame, text=word, font="Hiragino\ Maru\ Gothic\ ProN 25", bg='#464646', fg='white')
@@ -770,9 +791,6 @@ class mainwindow:
             choice = choice_list[i]
             listbox.insert('end', choice)
         """
-
-    def testboy(self):
-        print('test')
 
 class Filetype:
     def __init__(self, file):
